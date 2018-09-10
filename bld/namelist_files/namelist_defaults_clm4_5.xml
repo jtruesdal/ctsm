@@ -625,6 +625,8 @@ lnd/clm2/surfdata_map/surfdata_1x1_brazil_16pfts_Irrig_CMIP6_simyr2000_c171214.n
 >lnd/clm2/surfdata_map/surfdata_64x128_16pfts_Irrig_CMIP6_simyr2000_c170824.nc</fsurdat>
 
 <!-- Crop surface datasets -->
+<fsurdat hgrid="C96"  sim_year="2000" use_crop=".true." >
+lnd/clm2/surfdata_map/surfdata_C96_78pfts_CMIP6_simyr2000_c180823.nc</fsurdat>
 <fsurdat hgrid="0.47x0.63"  sim_year="2000" use_crop=".true." >
 lnd/clm2/surfdata_map/surfdata_0.47x0.63_78pfts_CMIP6_simyr2000_c170919.nc</fsurdat>
 <fsurdat hgrid="0.9x1.25"  sim_year="2000" use_crop=".true." >
