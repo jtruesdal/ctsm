@@ -57,6 +57,12 @@ attributes from the config_cache.xml file (with keys converted to upper-case).
 <scripgriddata hgrid="ne120np4.pg2" lmask="nomask" >atm/cam/coords/ne120pg2_scrip_c170629.nc</scripgriddata>
 <scripgriddata hgrid="ne120np4.pg3" lmask="nomask" >atm/cam/coords/ne120pg3_scrip_c170628.nc</scripgriddata>
 
+<!-- MPASA grids -->
+<scripgriddata hgrid="mpasa30"  lmask="nomask" >atm/cam/coords/mpasa30_SCRIP_desc.210601.nc</scripgriddata>
+<scripgriddata hgrid="mpasa60"  lmask="nomask" >atm/cam/coords/mpasa60_SCRIP_desc.210507.nc</scripgriddata>
+<scripgriddata hgrid="mpasa120" lmask="nomask" >atm/cam/coords/mpasa120_SCRIP_desc.200911.nc</scripgriddata>
+<scripgriddata hgrid="mpasa480" lmask="nomask" >atm/cam/coords/mpasa480_SCRIP_desc.200911.nc</scripgriddata>
+
 <!-- Refined mesh grids -->
 <scripgriddata hgrid="ne0np4CONUS.ne30x8"      lmask="nomask" >atm/cam/coords/ne0CONUSne30x8_scrip_c200107.nc</scripgriddata>
 <scripgriddata hgrid="ne0np4ARCTICGRIS.ne30x8" lmask="nomask" >atm/cam/coords/ne0ARCTICGRISne30x8_scrip_c191209.nc</scripgriddata>
