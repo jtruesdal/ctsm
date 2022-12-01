@@ -112,6 +112,7 @@ module ch4Mod
      real(r8) :: q10lakebase          ! (K) base temperature for lake CH4 production (= 298._r8)
      real(r8) :: atmch4               ! Atmospheric CH4 mixing ratio to prescribe if not provided by the atmospheric model (= 1.7e-6_r8) (mol/mol)
      real(r8) :: rob                  ! ratio of root length to vertical depth ("root obliquity") (= 3._r8)
+     real(r8) :: om_frac_sf           ! Scale factor for organic matter fraction (unitless)
   end type params_type
   type(params_type), private ::  params_inst
 
@@ -1565,6 +1566,11 @@ contains
      call ncd_io(trim(tString),tempr, 'read', ncid, readvar=readv)
      if ( .not. readv ) call endrun(msg=trim(errCode)//trim(tString)//errMsg(sourcefile, __LINE__))
      params_inst%capthick=tempr
+
+     tString='om_frac_sf'
+     call ncd_io(trim(tString),tempr, 'read', ncid, readvar=readv)
+     if ( .not. readv ) call endrun(msg=trim(errCode)//trim(tString)//errMsg(sourcefile, __LINE__))
+     params_inst%om_frac_sf=tempr
    
   end subroutine readParams
 
@@ -1678,6 +1684,8 @@ contains
     use ch4varcon     , only : replenishlakec, allowlakeprod, ch4offline
     use clm_varcon    , only : secspday
     use ch4varcon     , only : finundation_mtd, finundation_mtd_h2osfc
+    use clm_time_manager, only : is_beg_curr_year
+    use dynSubgridControlMod, only : get_do_transient_lakes
     !
     ! !ARGUMENTS:
     type(bounds_type)                      , intent(in)    :: bounds   
@@ -2312,7 +2320,16 @@ contains
            ch4_inst%totcolch4_grc(begg:endg), &
            c2l_scale_type= 'unity', l2g_scale_type='unity' )
 
+      !
       ! Gricell level balance
+      !
+
+      ! Skip the check if it's the beginning of a new year and dynamic lakes are on
+      ! See (https://github.com/ESCOMP/CTSM/issues/1356#issuecomment-905963583)
+      ! 
+      if ( is_beg_curr_year() .and. get_do_transient_lakes() )then
+         ch4_first_time_grc(begg:endg) = .true.
+      end if
 
       do g = begg, endg
          if (.not. ch4_first_time_grc(g)) then
@@ -2615,12 +2632,14 @@ contains
             end if
 
             ! If switched on, use pH factor for production based on spatial pH data defined in surface data.
-            if (.not. lake .and. usephfact .and. pH(c) >  pHmin .and.pH(c) <  pHmax) then
-               pH_fact_ch4 = 10._r8**(-0.2235_r8*pH(c)*pH(c) + 2.7727_r8*pH(c) - 8.6_r8)
-               ! fitted function using data from Dunfield et al. 1993  
-               ! Strictly less than one, with optimum at 6.5
-               ! From Lei Meng
-               f_ch4_adj = f_ch4_adj * pH_fact_ch4
+            if (.not. lake .and. usephfact )then 
+               if (  pH(c) >  pHmin .and.pH(c) <  pHmax) then
+                  pH_fact_ch4 = 10._r8**(-0.2235_r8*pH(c)*pH(c) + 2.7727_r8*pH(c) - 8.6_r8)
+                  ! fitted function using data from Dunfield et al. 1993  
+                  ! Strictly less than one, with optimum at 6.5
+                  ! From Lei Meng
+                  f_ch4_adj = f_ch4_adj * pH_fact_ch4
+               end if
             else
                ! if no data, then no pH effects
             end if
@@ -3661,7 +3680,7 @@ contains
                  ch4_aere_depth(c,j) - ch4_ebul_depth(c,j) ! [mol/m3-total/s]
             ! aerenchyma added to surface flux below
             ! ebul added to soil depth just above WT
-            if (source(c,j,1) + conc_ch4(c,j) / dtime < -1.e-12_r8) then
+            if (source(c,j,1) + conc_ch4(c,j) / dtime < -1.e-12_r8)then 
                write(iulog,*) 'Methane demands exceed methane available. Error in methane competition (mol/m^3/s), c,j:', &
                     source(c,j,1) + conc_ch4(c,j) / dtime, c, j
                g = col%gridcell(c)
@@ -3669,7 +3688,7 @@ contains
                call endrun(subgrid_index=c, subgrid_level=subgrid_level_column, &
                     msg=' ERROR: Methane demands exceed methane available.'&
                     //errMsg(sourcefile, __LINE__))
-            else if (ch4stress(c,j) < 1._r8 .and. source(c,j,1) + conc_ch4(c,j) / dtime > 1.e-12_r8) then
+            else if (ch4stress(c,j) < 1._r8 .and. source(c,j,1) + conc_ch4(c,j) / dtime > 1.e-12_r8) then  
                write(iulog,*) 'Methane limited, yet some left over. Error in methane competition (mol/m^3/s), c,j:', &
                     source(c,j,1) + conc_ch4(c,j) / dtime, c, j
                g = col%gridcell(c)
@@ -3845,7 +3864,7 @@ contains
                   ! expression in Wania (for peat) & Moldrup (for mineral soil)
                   eps =  watsat(c,j)-h2osoi_vol_min(c,j) ! Air-filled fraction of total soil volume
                   if (organic_max > 0._r8) then
-                     om_frac = min(cellorg(c,j)/organic_max, 1._r8)
+                     om_frac = min(params_inst%om_frac_sf*cellorg(c,j)/organic_max, 1._r8)
                      ! Use first power, not square as in iniTimeConst
                   else
                      om_frac = 1._r8
@@ -4154,7 +4173,7 @@ contains
 
          errch4(c) = errch4(c) + (ch4_surf_aere(c) + ch4_surf_ebul(c) + ch4_surf_diff(c))*dtime
 
-         if (abs(errch4(c)) < 1.e-8_r8) then
+         if (abs(errch4(c)) < 1.e-8_r8) then 
             ch4_surf_diff(c) = ch4_surf_diff(c) - errch4(c)/dtime
          else ! errch4 > 1e-8 mol / m^2 / timestep
             write(iulog,*)'CH4 Conservation Error in CH4Mod during diffusion, nstep, c, errch4 (mol /m^2.timestep)', &
@@ -4244,7 +4263,7 @@ contains
     ! !DESCRIPTION: Annual mean fields.
     !
     ! !USES:
-    use clm_time_manager, only: get_step_size_real, get_days_per_year, get_nstep
+    use clm_time_manager, only: get_step_size_real, get_curr_days_per_year, get_nstep
     use clm_varcon      , only: secspday
     !
     ! !ARGUMENTS:
@@ -4286,7 +4305,7 @@ contains
 
       ! set time steps
       dt = get_step_size_real()
-      secsperyear = real( get_days_per_year() * secspday, r8)
+      secsperyear = real( get_curr_days_per_year() * secspday, r8)
 
       do fc = 1,num_methc
          c = filter_methc(fc)
@@ -4354,7 +4373,9 @@ contains
     ! its original values
     !
     ! !USES:
-    use ch4varcon  , only : allowlakeprod
+    use ch4varcon       , only : allowlakeprod
+    use clm_varcon      , only : dzsoi_decomp
+    use landunit_varcon , only : isturb_tbd, isturb_hd, isturb_md
     !
     ! !ARGUMENTS:
     type(bounds_type) , intent(in)    :: bounds   
@@ -4367,7 +4388,7 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer :: fc, c
-    integer :: j
+    integer :: j, l
 
     character(len=*), parameter       :: subname = 'ch4_totcolch4'
     !-----------------------------------------------------------------------
@@ -4394,9 +4415,18 @@ contains
     do j = 1, nlevsoi
        do fc = 1, num_nolakec
           c = filter_nolakec(fc)
-          totcolch4(c) = totcolch4(c) + &
-               (finundated(c)*conc_ch4_sat(c,j) + (1._r8-finundated(c))*conc_ch4_unsat(c,j)) * &
-               dz(c,j)*catomw
+          l = col%landunit(c)
+          ! See doc/design/dynamic_urban.rst for an explanation of why we use dzsoi_decomp instead of dz for 
+          ! urban landunits.
+          if (lun%itype(l) .eq. isturb_tbd .or. lun%itype(l) .eq. isturb_hd .or. lun%itype(l) .eq. isturb_md) then
+             totcolch4(c) = totcolch4(c) + &
+                  (finundated(c)*conc_ch4_sat(c,j) + (1._r8-finundated(c))*conc_ch4_unsat(c,j)) * &
+                  dzsoi_decomp(j)*catomw
+          else
+             totcolch4(c) = totcolch4(c) + &
+                  (finundated(c)*conc_ch4_sat(c,j) + (1._r8-finundated(c))*conc_ch4_unsat(c,j)) * &
+                  dz(c,j)*catomw
+          end if
           ! mol CH4 --> g C
        end do
 

@@ -12,7 +12,7 @@ module histFileMod
   use shr_sys_mod    , only : shr_sys_flush
   use spmdMod        , only : masterproc
   use abortutils     , only : endrun
-  use clm_varctl     , only : iulog, use_vertsoilc, use_fates, compname
+  use clm_varctl     , only : iulog, use_fates, compname, use_cn, use_crop
   use clm_varcon     , only : spval, ispval
   use clm_varcon     , only : grlnd, nameg, namel, namec, namep
   use decompMod      , only : get_proc_bounds, get_proc_global, bounds_type, get_global_index_array
@@ -25,6 +25,7 @@ module histFileMod
   use EDTypesMod     , only : nlevleaf
   use FatesInterfaceTypesMod , only : nlevsclass, nlevage, nlevcoage
   use FatesInterfaceTypesMod , only : nlevheight
+  use FatesInterfaceTypesMod , only : nlevdamage
   use EDTypesMod        , only : nfsc
   use FatesLitterMod    , only : ncwd
   use PRTGenericMod     , only : num_elements_fates  => num_elements
@@ -193,7 +194,7 @@ module histFileMod
      character(len=max_chars)  :: units        ! units
      character(len=hist_dim_name_length) :: type1d                ! pointer to first dimension type from data type (nameg, etc)
      character(len=hist_dim_name_length) :: type1d_out            ! hbuf first dimension type from data type (nameg, etc)
-     character(len=hist_dim_name_length) :: type2d                ! hbuf second dimension type ["levgrnd","levlak","numrad","ltype","natpft","cft","glc_nec","elevclas","subname(n)"]
+     character(len=hist_dim_name_length) :: type2d                ! hbuf second dimension type ["levgrnd","levlak","numrad","ltype","natpft","cft","glc_nec","elevclas","subname(n)","mxsowings","mxharvests"]
      integer :: beg1d                          ! on-node 1d clm pointer start index
      integer :: end1d                          ! on-node 1d clm pointer end index
      integer :: num1d                          ! size of clm pointer first dimension (all nodes)
@@ -334,6 +335,8 @@ contains
     integer width_col_sum  ! widths of columns summed, including spaces
     character(len=3) str_width_col(ncol)  ! string version of width_col
     character(len=3) str_w_col_sum  ! string version of width_col_sum
+    character(len=7) file_identifier  ! fates identifier used in file_name
+    character(len=23) file_name  ! master_list_file.rst with or without fates
     character(len=99) fmt_txt  ! format statement
     character(len=*),parameter :: subname = 'CLM_hist_printflds'
     !-----------------------------------------------------------------------
@@ -378,14 +381,29 @@ contains
 
        ! Open master_list_file
        master_list_file = getavu()  ! get next available file unit number
-       open(unit = master_list_file, file = 'master_list_file.rst',  &
-            status = 'new', action = 'write', form = 'formatted')
+       if (use_fates) then
+          file_identifier = 'fates'
+       else
+          file_identifier = 'nofates'
+       end if
+       file_name = 'master_list_' // trim(file_identifier) // '.rst'
+       open(unit = master_list_file, file = file_name,  &
+            status = 'replace', action = 'write', form = 'formatted')
 
        ! File title
        fmt_txt = '(a)'
-       write(master_list_file,fmt_txt) '==================='
-       write(master_list_file,fmt_txt) 'CTSM History Fields'
-       write(master_list_file,fmt_txt) '==================='
+       write(master_list_file,fmt_txt) '============================='
+       write(master_list_file,fmt_txt) 'CTSM History Fields (' // trim(file_identifier) // ')'
+       write(master_list_file,fmt_txt) '============================='
+       write(master_list_file,*)
+
+       ! A warning message and flags from the current CTSM case
+       write(master_list_file,fmt_txt) 'CAUTION: Not all variables are relevant / present for all CTSM cases.'
+       write(master_list_file,fmt_txt) 'Key flags used in this CTSM case:'
+       fmt_txt = '(a,l)'
+       write(master_list_file,fmt_txt) 'use_cn = ', use_cn
+       write(master_list_file,fmt_txt) 'use_crop = ', use_crop
+       write(master_list_file,fmt_txt) 'use_fates = ', use_fates
        write(master_list_file,*)
 
        ! Table header
@@ -1254,7 +1272,7 @@ contains
     integer :: num2d               ! size of second dimension (e.g. number of vertical levels)
     integer :: numdims             ! number of dimensions
     character(len=*),parameter :: subname = 'hist_update_hbuf'
-    character(len=hist_dim_name_length) :: type2d     ! hbuf second dimension type ["levgrnd","levlak","numrad","ltype","natpft","cft","glc_nec","elevclas","subname(n)"]
+    character(len=hist_dim_name_length) :: type2d     ! hbuf second dimension type ["levgrnd","levlak","numrad","ltype","natpft","cft","glc_nec","elevclas","subname(n)","mxsowings","mxharvests"]
     !-----------------------------------------------------------------------
 
     do t = 1,ntapes
@@ -2262,7 +2280,7 @@ contains
     !
     ! !USES:
     use clm_varpar      , only : nlevgrnd, nlevsno, nlevlak, nlevurb, nlevmaxurbgrnd, numrad, nlevcan, nvegwcs,nlevsoi
-    use clm_varpar      , only : natpft_size, cft_size, maxpatch_glc, nlevdecomp_full
+    use clm_varpar      , only : natpft_size, cft_size, maxpatch_glc, nlevdecomp_full, mxsowings, mxharvests
     use landunit_varcon , only : max_lunit
     use clm_varctl      , only : caseid, ctitle, fsurdat, finidat, paramfile
     use clm_varctl      , only : version, hostname, username, conventions, source
@@ -2403,6 +2421,8 @@ contains
     call ncd_defdim(lnfid, 'ltype', max_lunit, dimid)
     call ncd_defdim(lnfid, 'nlevcan',nlevcan, dimid)
     call ncd_defdim(lnfid, 'nvegwcs',nvegwcs, dimid)
+    call ncd_defdim(lnfid, 'mxsowings' , mxsowings , dimid)
+    call ncd_defdim(lnfid, 'mxharvests' , mxharvests , dimid)
     call htape_add_ltype_metadata(lnfid)
     call htape_add_ctype_metadata(lnfid)
     call ncd_defdim(lnfid, 'natpft', natpft_size, dimid)
@@ -2437,8 +2457,12 @@ contains
        call ncd_defdim(lnfid, 'fates_levscpf', nlevsclass*numpft_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levcapf', nlevcoage*numpft_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levcan', nclmax, dimid)
+       call ncd_defdim(lnfid, 'fates_levleaf', nlevleaf, dimid)
        call ncd_defdim(lnfid, 'fates_levcnlf', nlevleaf * nclmax, dimid)
        call ncd_defdim(lnfid, 'fates_levcnlfpf', nlevleaf * nclmax * numpft_fates, dimid)
+       call ncd_defdim(lnfid, 'fates_levcdsc', nlevdamage * nlevsclass, dimid)
+       call ncd_defdim(lnfid, 'fates_levcdpf', nlevdamage * nlevsclass * numpft_fates, dimid)
+       call ncd_defdim(lnfid, 'fates_levcdam', nlevdamage, dimid)
        call ncd_defdim(lnfid, 'fates_levelem', num_elements_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levelpft', num_elements_fates * numpft_fates, dimid)
        call ncd_defdim(lnfid, 'fates_levelcwd', num_elements_fates * ncwd, dimid)
@@ -2575,7 +2599,8 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine htape_timeconst3D(t, &
-       bounds, watsat_col, sucsat_col, bsw_col, hksat_col, mode)
+       bounds, watsat_col, sucsat_col, bsw_col, hksat_col, &
+       cellsand_col, cellclay_col, mode)
     !
     ! !DESCRIPTION:
     ! Write time constant 3D variables to history tapes.
@@ -2586,7 +2611,7 @@ contains
     !
     ! !USES:
     use subgridAveMod  , only : c2g
-    use clm_varpar     , only : nlevgrnd ,nlevlak, nlevmaxurbgrnd
+    use clm_varpar     , only : nlevgrnd ,nlevlak, nlevmaxurbgrnd, nlevsoi
     use shr_string_mod , only : shr_string_listAppend
     use domainMod      , only : ldomain
     !
@@ -2597,6 +2622,8 @@ contains
     real(r8)          , intent(in) :: sucsat_col( bounds%begc:,1: )
     real(r8)          , intent(in) :: bsw_col( bounds%begc:,1: )
     real(r8)          , intent(in) :: hksat_col( bounds%begc:,1: )
+    real(r8)          , intent(in) :: cellsand_col( bounds%begc:,1: )
+    real(r8)          , intent(in) :: cellclay_col( bounds%begc:,1: )
     character(len=*)  , intent(in) :: mode ! 'define' or 'write'
     !
     ! !LOCAL VARIABLES:
@@ -2642,7 +2669,14 @@ contains
     character(len=*),parameter :: varnamesl(nfldsl) = (/ &
                                                           'ZLAKE ', &
                                                           'DZLAKE' &
-                                                          /)
+                                                      /)
+    real(r8), pointer :: histit(:,:)      ! temporary
+    real(r8), pointer :: histot(:,:)
+    integer, parameter :: nfldst = 2
+    character(len=*),parameter :: varnamest(nfldst) = (/ &
+                                                          'PCT_SAND ', &
+                                                          'PCT_CLAY '  &
+                                                      /)
     ! Scale type for subgrid averaging of landunits to grid cells, for lake fields
     character(len=scale_type_strlen) :: l2g_scale_typel(nfldsl) = [ &
          'lake', &  ! ZLAKE
@@ -2650,10 +2684,12 @@ contains
          ]
     !-----------------------------------------------------------------------
 
-    SHR_ASSERT_ALL_FL((ubound(watsat_col) == (/bounds%endc, nlevmaxurbgrnd/)), sourcefile, __LINE__)
-    SHR_ASSERT_ALL_FL((ubound(sucsat_col) == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
-    SHR_ASSERT_ALL_FL((ubound(bsw_col)    == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
-    SHR_ASSERT_ALL_FL((ubound(hksat_col)  == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(watsat_col)   == (/bounds%endc, nlevmaxurbgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(sucsat_col)   == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(bsw_col)      == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(hksat_col)    == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(cellsand_col) == (/bounds%endc, nlevsoi/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(cellclay_col) == (/bounds%endc, nlevsoi/)), sourcefile, __LINE__)
 
     !-------------------------------------------------------------------------------
     !***      Non-time varying 3D fields                    ***
@@ -2847,6 +2883,85 @@ contains
 
     end if  ! (define/write mode
 
+    if (mode == 'define') then
+       do ifld = 1,nfldst
+          ! Field indices MUST match varnamest array order above!
+          if (ifld == 1) then
+             long_name='percent sand'; units = 'percent'
+          else if (ifld == 2) then
+             long_name='percent clay'; units = 'percent'
+          else
+             call endrun(msg=' ERROR: bad 3D time-constant field index'//errMsg(sourcefile, __LINE__))
+          end if
+          if (tape(t)%dov2xy) then
+             if (ldomain%isgrid2d) then
+                call ncd_defvar(ncid=nfid(t), varname=trim(varnamest(ifld)), xtype=tape(t)%ncprec,&
+                     dim1name='lon', dim2name='lat', dim3name='levsoi', &
+                     long_name=long_name, units=units, missing_value=spval, fill_value=spval)
+             else
+                call ncd_defvar(ncid=nfid(t), varname=trim(varnamest(ifld)), xtype=tape(t)%ncprec, &
+                     dim1name=grlnd, dim2name='levsoi', &
+                     long_name=long_name, units=units, missing_value=spval, fill_value=spval)
+             end if
+          else
+             call ncd_defvar(ncid=nfid(t), varname=trim(varnamest(ifld)), xtype=tape(t)%ncprec, &
+                  dim1name=namec, dim2name='levsoi', &
+                  long_name=long_name, units=units, missing_value=spval, fill_value=spval)
+          end if
+          call shr_string_listAppend(TimeConst3DVars,varnamest(ifld))
+       end do
+
+    else if (mode == 'write') then
+
+       allocate(histit(bounds%begc:bounds%endc,nlevsoi), stat=ier)
+       if (ier /= 0) then
+          write(iulog,*) trim(subname),' ERROR: allocation error for histit'
+          call endrun(msg=errMsg(sourcefile, __LINE__))
+       end if
+
+       ! Write time constant fields
+
+       if (tape(t)%dov2xy) then
+          allocate(histot(bounds%begg:bounds%endg,nlevsoi), stat=ier)
+          if (ier /= 0) then
+             write(iulog,*)  trim(subname),' ERROR: allocation error for histot'
+             call endrun(msg=errMsg(sourcefile, __LINE__))
+          end if
+       end if
+
+       do ifld = 1,nfldst
+          histit(:,:) = spval
+          do lev = 1,nlevsoi
+             do c = bounds%begc,bounds%endc
+                ! Field indices MUST match varnamesl array order above!
+                if (ifld ==1) histit(c,lev) = cellsand_col(c,lev)
+                if (ifld ==2) histit(c,lev) = cellclay_col(c,lev)
+             end do
+          end do
+          if (tape(t)%dov2xy) then
+             histot(:,:) = spval
+             call c2g(bounds, nlevsoi, &
+                  histit(bounds%begc:bounds%endc, :), &
+                  histot(bounds%begg:bounds%endg, :), &
+                  c2l_scale_type='unity', l2g_scale_type='veg')
+             if (ldomain%isgrid2d) then
+                call ncd_io(varname=trim(varnamest(ifld)), dim1name=grlnd, &
+                     data=histot, ncid=nfid(t), flag='write')
+             else
+                call ncd_io(varname=trim(varnamest(ifld)), dim1name=grlnd, &
+                     data=histot, ncid=nfid(t), flag='write')
+             end if
+          else
+             call ncd_io(varname=trim(varnamest(ifld)), dim1name=namec,  &
+                  data=histit, ncid=nfid(t), flag='write')
+          end if
+       end do
+
+       if (tape(t)%dov2xy) deallocate(histot)
+       deallocate(histit)
+
+    end if  ! (define/write mode
+
   end subroutine htape_timeconst3D
 
   !-----------------------------------------------------------------------
@@ -2855,6 +2970,7 @@ contains
     ! !DESCRIPTION:
     ! Write time constant values to primary history tape.
     use clm_time_manager, only : get_step_size
+    use SoilBiogeochemDecompCascadeConType, only : decomp_method, no_soil_decomp
     ! Issue the required netcdf wrapper calls to define the history file
     ! contents.
     !
@@ -2881,8 +2997,10 @@ contains
     use FatesInterfaceTypesMod, only : fates_hdim_agmap_levagepft
     use FatesInterfaceTypesMod, only : fates_hdim_pftmap_levagepft
     use FatesInterfaceTypesMod, only : fates_hdim_levfuel
+    use FatesInterfaceTypesMod, only : fates_hdim_levdamage
     use FatesInterfaceTypesMod, only : fates_hdim_levcwdsc
     use FatesInterfaceTypesMod, only : fates_hdim_levcan
+    use FatesInterfaceTypesMod, only : fates_hdim_levleaf
     use FatesInterfaceTypesMod, only : fates_hdim_canmap_levcnlf
     use FatesInterfaceTypesMod, only : fates_hdim_lfmap_levcnlf
     use FatesInterfaceTypesMod, only : fates_hdim_canmap_levcnlfpf
@@ -2897,6 +3015,11 @@ contains
     use FatesInterfaceTypesMod, only : fates_hdim_agemap_levelage
     use FatesInterfaceTypesMod, only : fates_hdim_agmap_levagefuel
     use FatesInterfaceTypesMod, only : fates_hdim_fscmap_levagefuel
+    use FatesInterfaceTypesMod, only : fates_hdim_scmap_levcdsc
+    use FatesInterfaceTypesMod, only : fates_hdim_cdmap_levcdsc
+    use FatesInterfaceTypesMod, only : fates_hdim_scmap_levcdpf
+    use FatesInterfaceTypesMod, only : fates_hdim_cdmap_levcdpf
+    use FatesInterfaceTypesMod, only : fates_hdim_pftmap_levcdpf
 
 
     !
@@ -2966,8 +3089,11 @@ contains
                   long_name='FATES pft index of the combined pft-size class dimension', units='-', ncid=nfid(t))
              call ncd_defvar(varname='fates_scmap_levscpf',xtype=ncd_int, dim1name='fates_levscpf', &
                   long_name='FATES size index of the combined pft-size class dimension', units='-', ncid=nfid(t))
+             ! Units are dash here with units of yr added to the long name so
+             ! that postprocessors (like ferret) won't get confused with what
+             ! the time coordinate is. EBK Nov/3/2021 (see #1540)
              call ncd_defvar(varname='fates_levcacls', xtype=tape(t)%ncprec, dim1name='fates_levcacls', &
-                  long_name='FATES cohort age class lower bound', units='years', ncid=nfid(t))
+                  long_name='FATES cohort age class lower bound (yr)', units='-', ncid=nfid(t))
              call ncd_defvar(varname='fates_pftmap_levcapf',xtype=ncd_int, dim1name='fates_levcapf', &
                   long_name='FATES pft index of the combined pft-cohort age class dimension', units='-', ncid=nfid(t))
              call ncd_defvar(varname='fates_camap_levcapf',xtype=ncd_int, dim1name='fates_levcapf', &
@@ -2984,6 +3110,8 @@ contains
                   long_name='FATES cwd size class', ncid=nfid(t))
              call ncd_defvar(varname='fates_levcan',xtype=ncd_int, dim1name='fates_levcan', &
                   long_name='FATES canopy level', ncid=nfid(t))
+             call ncd_defvar(varname='fates_levleaf',xtype=ncd_int, dim1name='fates_levleaf', &
+                  long_name='FATES leaf+stem level', units='VAI', ncid=nfid(t))
              call ncd_defvar(varname='fates_canmap_levcnlf',xtype=ncd_int, dim1name='fates_levcnlf', &
                   long_name='FATES canopy level of combined canopy-leaf dimension', ncid=nfid(t))
              call ncd_defvar(varname='fates_lfmap_levcnlf',xtype=ncd_int, dim1name='fates_levcnlf', &
@@ -3008,8 +3136,18 @@ contains
                    long_name='FATES age-class map into patch age x fuel size', units='-', ncid=nfid(t))
              call ncd_defvar(varname='fates_fscmap_levagefuel', xtype=ncd_int, dim1name='fates_levagefuel', &
                    long_name='FATES fuel size-class map into patch age x fuel size', units='-', ncid=nfid(t))
-
-
+             call ncd_defvar(varname='fates_cdmap_levcdsc',xtype=ncd_int, dim1name='fates_levcdsc', &
+                  long_name='FATES damage index of the combined damage-size dimension', ncid=nfid(t))
+             call ncd_defvar(varname='fates_scmap_levcdsc',xtype=ncd_int, dim1name='fates_levcdsc', &
+                  long_name='FATES size index of the combined damage-size dimension', ncid=nfid(t))
+             call ncd_defvar(varname='fates_cdmap_levcdpf',xtype=ncd_int, dim1name='fates_levcdpf', &
+                  long_name='FATES damage index of the combined damage-size-PFT dimension', ncid=nfid(t))
+             call ncd_defvar(varname='fates_scmap_levcdpf',xtype=ncd_int, dim1name='fates_levcdpf', &
+                  long_name='FATES size index of the combined damage-size-PFT dimension', ncid=nfid(t))
+             call ncd_defvar(varname='fates_pftmap_levcdpf',xtype=ncd_int, dim1name='fates_levcdpf', &
+                  long_name='FATES pft index of the combined damage-size-PFT dimension', ncid=nfid(t))
+             call ncd_defvar(varname='fates_levcdam', xtype=tape(t)%ncprec, dim1name='fates_levcdam', &
+                  long_name='FATES damage class lower bound', units='unitless', ncid=nfid(t))
 
           end if
 
@@ -3019,7 +3157,7 @@ contains
           call ncd_io(varname='levgrnd', data=zsoi, ncid=nfid(t), flag='write')
           call ncd_io(varname='levsoi', data=zsoi(1:nlevsoi), ncid=nfid(t), flag='write')
           call ncd_io(varname='levlak' , data=zlak, ncid=nfid(t), flag='write')
-          if (use_vertsoilc) then
+          if ( decomp_method /= no_soil_decomp )then
              call ncd_io(varname='levdcmp', data=zsoi, ncid=nfid(t), flag='write')
           else
              zsoi_1d(1) = 1._r8
@@ -3038,8 +3176,10 @@ contains
              call ncd_io(varname='fates_levheight',data=fates_hdim_levheight, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_levpft',data=fates_hdim_levpft, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_levfuel',data=fates_hdim_levfuel, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_levcdam',data=fates_hdim_levdamage, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_levcwdsc',data=fates_hdim_levcwdsc, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_levcan',data=fates_hdim_levcan, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_levleaf',data=fates_hdim_levleaf, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_canmap_levcnlf',data=fates_hdim_canmap_levcnlf, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_lfmap_levcnlf',data=fates_hdim_lfmap_levcnlf, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_canmap_levcnlfpf',data=fates_hdim_canmap_levcnlfpf, ncid=nfid(t), flag='write')
@@ -3052,6 +3192,11 @@ contains
              call ncd_io(varname='fates_agmap_levagepft',data=fates_hdim_agmap_levagepft, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_agmap_levagefuel',data=fates_hdim_agmap_levagefuel, ncid=nfid(t), flag='write')
              call ncd_io(varname='fates_fscmap_levagefuel',data=fates_hdim_fscmap_levagefuel, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_scmap_levcdsc',data=fates_hdim_scmap_levcdsc, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_cdmap_levcdsc',data=fates_hdim_cdmap_levcdsc, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_scmap_levcdpf',data=fates_hdim_scmap_levcdpf, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_cdmap_levcdpf',data=fates_hdim_cdmap_levcdpf, ncid=nfid(t), flag='write')
+             call ncd_io(varname='fates_pftmap_levcdpf',data=fates_hdim_pftmap_levcdpf, ncid=nfid(t), flag='write')
           end if
 
        endif
@@ -3773,7 +3918,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine hist_htapes_wrapup( rstwr, nlend, bounds, &
-       watsat_col, sucsat_col, bsw_col, hksat_col)
+       watsat_col, sucsat_col, bsw_col, hksat_col, cellsand_col, cellclay_col)
     !
     ! !DESCRIPTION:
     ! Write history tape(s)
@@ -3799,7 +3944,7 @@ contains
     use clm_time_manager, only : get_nstep, get_curr_date, get_curr_time, get_prev_date
     use clm_varcon      , only : secspday
     use perf_mod        , only : t_startf, t_stopf
-    use clm_varpar      , only : nlevgrnd, nlevmaxurbgrnd
+    use clm_varpar      , only : nlevgrnd, nlevmaxurbgrnd, nlevsoi
     !
     ! !ARGUMENTS:
     logical, intent(in) :: rstwr    ! true => write restart file this step
@@ -3809,6 +3954,8 @@ contains
     real(r8)          , intent(in) :: sucsat_col( bounds%begc:,1: )
     real(r8)          , intent(in) :: bsw_col( bounds%begc:,1: )
     real(r8)          , intent(in) :: hksat_col( bounds%begc:,1: )
+    real(r8)          , intent(in) :: cellsand_col( bounds%begc:,1: )
+    real(r8)          , intent(in) :: cellclay_col( bounds%begc:,1: )
     !
     ! !LOCAL VARIABLES:
     integer :: t                          ! tape index
@@ -3832,10 +3979,12 @@ contains
     character(len=*),parameter :: subname = 'hist_htapes_wrapup'
     !-----------------------------------------------------------------------
 
-    SHR_ASSERT_ALL_FL((ubound(watsat_col) == (/bounds%endc, nlevmaxurbgrnd/)), sourcefile, __LINE__)
-    SHR_ASSERT_ALL_FL((ubound(sucsat_col) == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
-    SHR_ASSERT_ALL_FL((ubound(bsw_col)    == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
-    SHR_ASSERT_ALL_FL((ubound(hksat_col)  == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(watsat_col)    == (/bounds%endc, nlevmaxurbgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(sucsat_col)    == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(bsw_col)       == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(hksat_col)     == (/bounds%endc, nlevgrnd/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(cellsand_col)  == (/bounds%endc, nlevsoi/)), sourcefile, __LINE__)
+    SHR_ASSERT_ALL_FL((ubound(cellclay_col)  == (/bounds%endc, nlevsoi/)), sourcefile, __LINE__)
 
     ! get current step
 
@@ -3908,7 +4057,8 @@ contains
              ! Define 3D time-constant field variables on first history tapes
              if ( do_3Dtconst) then
                 call htape_timeconst3D(t, &
-                     bounds, watsat_col, sucsat_col, bsw_col, hksat_col, mode='define')
+                     bounds, watsat_col, sucsat_col, bsw_col, hksat_col, &
+                     cellsand_col, cellclay_col, mode='define')
                 TimeConst3DVars_Filename = trim(locfnh(t))
              end if
 
@@ -3927,7 +4077,8 @@ contains
           ! Write 3D time constant history variables to first history tapes
           if ( do_3Dtconst .and. tape(t)%ntimes == 1 )then
              call htape_timeconst3D(t, &
-                  bounds, watsat_col, sucsat_col, bsw_col, hksat_col, mode='write')
+                  bounds, watsat_col, sucsat_col, bsw_col, hksat_col, &
+                  cellsand_col, cellclay_col, mode='write')
              do_3Dtconst = .false.
           end if
 
@@ -4019,7 +4170,7 @@ contains
     use clm_varctl      , only : nsrest, caseid, inst_suffix, nsrStartup, nsrBranch
     use fileutils       , only : getfil
     use domainMod       , only : ldomain
-    use clm_varpar      , only : nlevgrnd, nlevlak, numrad, nlevdecomp_full
+    use clm_varpar      , only : nlevgrnd, nlevlak, numrad, nlevdecomp_full, mxsowings, mxharvests
     use clm_time_manager, only : is_restart
     use restUtilMod     , only : iflag_skip
     use pio
@@ -5225,7 +5376,7 @@ contains
     !
     ! !USES:
     use clm_varpar      , only : nlevgrnd, nlevsno, nlevlak, numrad, nlevdecomp_full, nlevcan, nvegwcs,nlevsoi
-    use clm_varpar      , only : natpft_size, cft_size, maxpatch_glc
+    use clm_varpar      , only : natpft_size, cft_size, maxpatch_glc, mxsowings, mxharvests
     use landunit_varcon , only : max_lunit
     !
     ! !ARGUMENTS:
@@ -5305,6 +5456,10 @@ contains
        num2d = numrad
     case ('levdcmp')
        num2d = nlevdecomp_full
+    case ('mxsowings')
+       num2d = mxsowings
+    case ('mxharvests')
+       num2d = mxharvests
     case ('fates_levscls')
        num2d = nlevsclass
     case('fates_levcacls')
@@ -5331,10 +5486,18 @@ contains
        num2d = nlevage*numpft_fates
     case ('fates_levcan')
        num2d = nclmax
+    case ('fates_levleaf')
+       num2d = nlevleaf
     case ('fates_levcnlf')
        num2d = nlevleaf * nclmax
     case ('fates_levcnlfpf')
        num2d = nlevleaf * nclmax * numpft_fates
+    case ('fates_levcdsc')
+       num2d = nlevdamage * nlevsclass
+    case ('fates_levcdpf')
+       num2d = nlevdamage * nlevsclass * numpft_fates
+    case ('fates_levcdam')
+       num2d = nlevdamage
     case ('ltype')
        num2d = max_lunit
     case ('natpft')
@@ -5372,7 +5535,7 @@ contains
     case default
        write(iulog,*) trim(subname),' ERROR: unsupported 2d type ',type2d, &
           ' currently supported types for multi level fields are: ', &
-          '[levgrnd,levsoi,levlak,numrad,levdcmp,levtrc,ltype,natpft,cft,glc_nec,elevclas,levsno,nvegwcs]'
+          '[levgrnd,levsoi,levlak,numrad,levdcmp,levtrc,ltype,natpft,cft,glc_nec,elevclas,levsno,nvegwcs,mxsowings,mxharvests]'
        call endrun(msg=errMsg(sourcefile, __LINE__))
     end select
 
