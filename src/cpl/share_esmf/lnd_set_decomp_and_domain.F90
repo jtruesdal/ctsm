@@ -203,7 +203,7 @@ contains
           gindex_ctsm(n) = gindex_ocn(n-nlnd)
        end if
     end do
-    call t_stopf ('lnd_set_decomp_and_domain_from_readmesh: decomp_init')
+    !call t_stopf ('lnd_set_decomp_and_domain_from_readmesh: decomp_init')
 
     ! Generate a new mesh on the gindex decomposition
     ! NOTE: The distgrid_ctsm will be used later in lnd_import_export, even though it appears to just be local

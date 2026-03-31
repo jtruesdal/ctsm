@@ -10,22 +10,22 @@ module ctsm_memcheck
 contains
 
     subroutine memcheck(msg)
-        use proc_status_vm, only : prt_vm_status, shr_malloc_trim
+        !use proc_status_vm, only : prt_vm_status, shr_malloc_trim
         use shr_mem_mod, only : shr_mem_getusage
         use shr_sys_mod, only : shr_sys_flush
         character(len=*), intent(in) :: msg
 
         real(r8) :: msize, mrss  ! Memory size and resident set size
 
-        call shr_malloc_trim()  ! Make sure the OS trims the memory in response to deallocates
+        !call shr_malloc_trim()  ! Make sure the OS trims the memory in response to deallocates
 
         ! Only output memory on main task as memory usage should be similar between tasks
-        if (masterproc) then
-           call prt_vm_status('CTSM(Memory check): ' // trim(msg))
-           call shr_mem_getusage( msize, mrss, prt=.true.)
-           write(iulog,*) '        msize, mrss = ',msize, mrss
-           call shr_sys_flush(iulog)
-        end if
+        !if (masterproc) then
+        !   call prt_vm_status('CTSM(Memory check): ' // trim(msg))
+        !   call shr_mem_getusage( msize, mrss, prt=.true.)
+        !   write(iulog,*) '        msize, mrss = ',msize, mrss
+        !   call shr_sys_flush(iulog)
+        !end if
 
     end subroutine memcheck
 

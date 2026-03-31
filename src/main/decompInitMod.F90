@@ -1078,7 +1078,7 @@ contains
     deallocate(start_global)
     if (allocated(index_lndgridcells)) deallocate(index_lndgridcells)
 
-    call t_stopf('decompInit_glcp')
+    !call t_stopf('decompInit_glcp')
 
   end subroutine decompInit_glcp
 

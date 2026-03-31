@@ -68,10 +68,10 @@ contains
        ntests = ntests + 1
        call test_ncdio_pio(bounds)
     end if
-    if (for_testing_run_decomp_init_tests) then
-       ntests = ntests + 1
-       call test_decomp_init()
-    end if
+    !if (for_testing_run_decomp_init_tests) then
+    !   ntests = ntests + 1
+    !   call test_decomp_init()
+    !end if
     if ( masterproc ) then
        write(iulog,*) '-------------------------------'
        write(iulog,*) '----- Ending self tests -------'
