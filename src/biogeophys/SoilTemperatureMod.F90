@@ -1811,6 +1811,7 @@ contains
     use column_varcon  , only : icol_roof, icol_sunwall, icol_shadewall
     use clm_varpar     , only : nlevsno, nlevgrnd, nlevurb, nlevmaxurbgrnd
     use UrbanParamsType, only : IsSimpleBuildTemp
+    use shr_sys_mod           , only : shr_sys_flush
     !
     ! !ARGUMENTS:
     implicit none
@@ -1891,6 +1892,21 @@ contains
                  .and. col%itype(c) /= icol_roof .and. j <= nlevgrnd) then
                if (j >= col%snl(c)+1) then
                   if (j == col%snl(c)+1) then
+                     ! -------------------------------------------------------------
+                     ! LND DIAGNOSTIC TRAP: Isolate Column Type and Gridcell
+                     ! -------------------------------------------------------------
+                     if (cv(c,j) == 0.0_r8) then
+                        write(iulog,*) '=== HEAT FLUX DIV-BY-ZERO TRAP ==='
+                        write(iulog,*) 'Column Index c = ', c
+                        write(iulog,*) 'Gridcell g     = ', col%gridcell(c)
+                        write(iulog,*) 'Landunit l     = ', col%landunit(c)
+                        write(iulog,*) 'Landunit Type  = ', lun%itype(col%landunit(c))
+                        write(iulog,*) 'Column Type    = ', col%itype(c)
+                        write(iulog,*) 'cv(c,j)        = ', cv(c,j)
+                        write(iulog,*) '=================================='
+                        call shr_sys_flush(iulog)
+                     end if
+                     ! -------------------------------------------------------------
                      fact(c,j) = dtime/cv(c,j) * dz(c,j) / (0.5_r8*(z(c,j)-zi(c,j-1)+capr*(z(c,j+1)-zi(c,j-1))))
                      fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z(c,j+1)-z(c,j))
                   else if (j <= nlevgrnd-1) then

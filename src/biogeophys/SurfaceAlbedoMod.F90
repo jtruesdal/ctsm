@@ -1,3 +1,4 @@
+#define planet_mars
 module SurfaceAlbedoMod
 
 #include "shr_assert.h"
@@ -7,6 +8,7 @@ module SurfaceAlbedoMod
   ! Performs surface albedo calculations
   !
   ! !PUBLIC TYPES:
+  use clm_time_manager  , only : get_nstep
   use shr_kind_mod      , only : r8 => shr_kind_r8
   use shr_log_mod       , only : errMsg => shr_log_errMsg
   use decompMod         , only : bounds_type, subgrid_level_patch
@@ -228,8 +230,11 @@ contains
 
   ! -----------------------------------------------------------------------
   
-  subroutine UpdateZenithAngles(bounds, surfalb_inst, nextsw_cday, declinp1)
-
+  subroutine UpdateZenithAngles(bounds, surfalb_inst, nextsw_cday, declinp1 &
+#ifdef planet_mars
+       , dt_avg_mars, mars_frac_day &
+#endif
+       )
     ! Incorporate surface slopes to generate column level zenith angles
     
     use clm_varctl          , only : downscale_hillslope_meteorology
@@ -239,7 +244,10 @@ contains
     type(surfalb_type)     , intent(inout)         :: surfalb_inst
     real(r8)               , intent(in)            :: nextsw_cday        ! calendar day at Greenwich (1.00, ..., days/year)
     real(r8)               , intent(in)            :: declinp1           ! declination angle (radians) for next time step
-
+#ifdef planet_mars
+    real(r8)               , intent(in)            :: dt_avg_mars        ! Mars scaled integration window
+    real(r8)               , intent(in)            :: mars_frac_day      ! Mars fractional day
+#endif
     integer :: c,g        ! indices
     
     associate( &
@@ -250,9 +258,32 @@ contains
 
       ! Cosine solar zenith angle for next time step
       ! First calculate grid-scale zenith based on time and location, no topographic effects
-      do g = bounds%begg,bounds%endg
+do g = bounds%begg,bounds%endg
+#ifdef planet_mars
+         ! MARS MOD: Use fractional day and pass integration window for time-averaging
+         coszen_grc(g) = shr_orb_cosz (mars_frac_day, grc%lat(g), grc%lon(g), declinp1, dt_avg=dt_avg_mars)
+         ! Use fractional day for azimuth calculation
+         azsun_grc(g) = shr_orb_azimuth(mars_frac_day, grc%lat(g), grc%lon(g), declinp1, acos(coszen_grc(g)))
+         ! -------------------------------------------------------------
+         ! LND DIAGNOSTIC TRAP 2: Zenith Calculation
+         ! -------------------------------------------------------------
+         if (g == bounds%begg) then
+            write(iulog,*) '=== LND ZENITH TRAP ==='
+            write(iulog,*) 'LND mar_frac_day    = ', mars_frac_day
+            write(iulog,*) 'LND nextsw_cday     = ', nextsw_cday
+            write(iulog,*) 'LND nstep           = ', get_nstep()
+            write(iulog,*) 'LND dt_avg_mars     = ', dt_avg_mars
+            write(iulog,*) 'LND declinp1        = ', declinp1
+            write(iulog,*) 'LND lat / lon (rad) = ', grc%lat(g), grc%lon(g)
+            write(iulog,*) 'LND coszen_grc      = ', coszen_grc(g)
+            write(iulog,*) '======================='
+         endif
+         ! -------------------------------------------------------------
+#else
+         ! Standard Earth logic
          coszen_grc(g) = shr_orb_cosz (nextsw_cday, grc%lat(g), grc%lon(g), declinp1)
          azsun_grc(g) = shr_orb_azimuth(nextsw_cday, grc%lat(g), grc%lon(g), declinp1, acos(coszen_grc(g)))
+#endif
       end do
 
       ! calculate local incidence angle based on column slope and aspect
@@ -285,7 +316,11 @@ contains
         nextsw_cday  , declinp1,       &
         clm_fates,                     &
         aerosol_inst, canopystate_inst, waterstatebulk_inst, waterdiagnosticbulk_inst, &
-        lakestate_inst, temperature_inst, surfalb_inst)
+        lakestate_inst, temperature_inst, surfalb_inst &
+#ifdef planet_mars
+        , dt_avg_mars, mars_frac_day &
+#endif
+        )
     !
     ! !DESCRIPTION:
     ! Surface albedo and two-stream fluxes
@@ -329,6 +364,10 @@ contains
     integer                , intent(in)            :: filter_urbanp(:)   ! patch filter for rban points
     real(r8)               , intent(in)            :: nextsw_cday        ! calendar day at Greenwich (1.00, ..., days/year)
     real(r8)               , intent(in)            :: declinp1           ! declination angle (radians) for next time step
+#ifdef planet_mars
+    real(r8)               , intent(in)            :: dt_avg_mars
+    real(r8)               , intent(in)            :: mars_frac_day
+#endif
     type(hlm_fates_interface_type), intent(inout)  :: clm_fates
     type(aerosol_type)     , intent(in)            :: aerosol_inst
     type(canopystate_type) , intent(in)            :: canopystate_inst
@@ -479,9 +518,12 @@ contains
           fabi_sha_z    =>    surfalb_inst%fabi_sha_z_patch         & ! Output:  [real(r8) (:,:) ]  absorbed shaded leaf diffuse PAR (per unit lai+sai) for each canopy layer
           )
 
-
+#ifdef planet_mars
+    call UpdateZenithAngles(bounds,surfalb_inst, nextsw_cday, declinp1, dt_avg_mars, mars_frac_day)
+#else
     call UpdateZenithAngles(bounds,surfalb_inst, nextsw_cday, declinp1)
-     
+#endif
+
     ! Apply column level zenith angles to the patch level
     do fp = 1,num_nourbanp
        p = filter_nourbanp(fp)

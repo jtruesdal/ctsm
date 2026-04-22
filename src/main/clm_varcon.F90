@@ -1,3 +1,4 @@
+#define planet_mars
 module clm_varcon
 
   !-----------------------------------------------------------------------
@@ -78,7 +79,11 @@ module clm_varcon
   real(r8), public :: bdsno = 250._r8                               ! bulk density snow (kg/m**3)
   real(r8), public :: alpha_aero = 1.0_r8                           ! constant for aerodynamic parameter weighting
   real(r8), public :: tlsai_crit = 2.0_r8                           ! critical value of elai+esai for which aerodynamic parameters are maximum
-  real(r8), public :: watmin = 0.01_r8                              ! minimum soil moisture (mm)
+#ifdef planet_mars
+  real(r8), public :: watmin = 1.0e-15_r8                              ! minimum soil moisture (mm)
+#else
+  real(r8), public :: watmin = 0.01_r8                              ! minimum soil moisture (mm) For Mars this causes frost planet except for initial terminator.
+#endif
   real(r8), public :: c_water = SHR_CONST_CPFW                      ! specific heat of water   [J/kg/K]
   real(r8), public :: c_dry_biomass  = 1400_r8                      ! specific heat of dry biomass
 

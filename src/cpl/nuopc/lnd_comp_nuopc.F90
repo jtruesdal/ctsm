@@ -1,3 +1,4 @@
+#define planet_mars
 module lnd_comp_nuopc
 
   !----------------------------------------------------------------------------
@@ -35,6 +36,8 @@ module lnd_comp_nuopc
   use spmdMod                , only : masterproc, mpicom, spmd_init
   use controlMod             , only : control_setNL, control_init, control_print, NLFilename
   use clm_varorb             , only : eccen, obliqr, lambm0, mvelpp
+  use clm_varorb             , only : exo_planet_radius,exo_surface_gravity,exo_diurnal, &
+                                      exo_ndays, exo_porb, exo_sday
   use clm_varctl             , only : inst_index, inst_suffix, inst_name
   use clm_varctl             , only : single_column, clm_varctl_set, iulog
   use clm_varctl             , only : nsrStartup, nsrContinue, nsrBranch
@@ -66,6 +69,9 @@ module lnd_comp_nuopc
   private :: ModelFinalize       ! Finalize the model
   private :: clm_orbital_init    ! Initialize the orbital information
   private :: clm_orbital_update  ! Update the orbital information
+#ifdef planet_mars
+  private :: clm_exo_orbital_update  ! Update the orbital information
+#endif
   private :: CheckImport
 
   !--------------------------------------------------------------------------
@@ -90,7 +96,14 @@ module lnd_comp_nuopc
   real(R8)               :: orb_obliq       ! attribute - obliquity in degrees
   real(R8)               :: orb_mvelp       ! attribute - moving vernal equinox longitude
   real(R8)               :: orb_eccen       ! attribute and update-  orbital eccentricity
-
+#ifdef planet_mars
+  real(r8)               :: orb_exo_planet_radius      !! radius ~ m
+  real(r8)               :: orb_exo_surface_gravity    !! gravity ~ m/s^2
+  real(r8)               :: orb_exo_diurnal            !! Length of diurnal period, solar-day ~ s
+  real(r8)               :: orb_exo_ndays              !! scaler to number of Earth days
+  real(r8)               :: orb_exo_porb               !! orbital period in Earth Days, for obliquity/eccentricity cycles
+  real(r8)               :: orb_exo_sday               !! sidereal period
+#endif
   logical                :: scol_valid      ! if single_column, does point have a mask of zero
 
   integer                :: nthrds          ! Number of threads per task in this component
@@ -569,7 +582,11 @@ contains
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call clm_orbital_update(clock, iulog, masterproc, eccen, obliqr, lambm0, mvelpp, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
+#ifdef planet_mars
+    call clm_exo_orbital_update(clock, iulog, masterproc,exo_planet_radius, &
+         exo_surface_gravity, exo_diurnal, exo_ndays, exo_porb, exo_sday, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+#endif
     !----------------------
     ! Initialize CTSM time manager
     !----------------------
@@ -898,6 +915,12 @@ contains
     ! Note - the orbital inquiries set the values in clm_varorb via the module use statements
     call  clm_orbital_update(clock, iulog, masterproc, eccen, obliqr, lambm0, mvelpp, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+#ifdef planet_mars
+    call clm_exo_orbital_update(clock, iulog, masterproc,exo_planet_radius, &
+         exo_surface_gravity, exo_diurnal, exo_ndays, exo_porb, exo_sday, rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+#endif
+
     calday = get_curr_calday(reuse_day_365_for_day_366=.true.)
     call shr_orb_decl( calday     , eccen, mvelpp, lambm0, obliqr, declin  , eccf )
     call shr_orb_decl( nextsw_cday, eccen, mvelpp, lambm0, obliqr, declinp1, eccf )
@@ -1181,6 +1204,31 @@ contains
     call NUOPC_CompAttributeGet(gcomp, name="orb_mvelp", value=cvalue, rc=rc)
     if (chkerr(rc,__LINE__,u_FILE_u)) return
     read(cvalue,*) orb_mvelp
+#ifdef planet_mars
+    call NUOPC_CompAttributeGet(gcomp, name="orb_exo_planet_radius", value=cvalue, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    read(cvalue,*) orb_exo_planet_radius
+
+    call NUOPC_CompAttributeGet(gcomp, name="orb_exo_surface_gravity", value=cvalue, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    read(cvalue,*) orb_exo_surface_gravity
+
+    call NUOPC_CompAttributeGet(gcomp, name="orb_exo_diurnal", value=cvalue, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    read(cvalue,*) orb_exo_diurnal
+
+    call NUOPC_CompAttributeGet(gcomp, name="orb_exo_ndays", value=cvalue, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    read(cvalue,*) orb_exo_ndays
+
+    call NUOPC_CompAttributeGet(gcomp, name="orb_exo_porb", value=cvalue, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    read(cvalue,*) orb_exo_porb
+
+    call NUOPC_CompAttributeGet(gcomp, name="orb_exo_sday", value=cvalue, rc=rc)
+    if (chkerr(rc,__LINE__,u_FILE_u)) return
+    read(cvalue,*) orb_exo_sday
+#endif
 
     ! Error checks
     if (trim(orb_mode) == trim(orb_fixed_year)) then
@@ -1291,6 +1339,39 @@ contains
 
   end subroutine clm_orbital_update
 
+  !===============================================================================
+#ifdef planet_mars
+  subroutine clm_exo_orbital_update(clock, logunit,  mastertask, planet_radius, &
+       surface_gravity, diurnal, ndays, porb, sday, rc)
+
+    !----------------------------------------------------------
+    ! Update orbital settings
+    !----------------------------------------------------------
+
+    ! input/output variables
+    type(ESMF_Clock) , intent(in)    :: clock
+    integer          , intent(in)    :: logunit
+    logical          , intent(in)    :: mastertask
+    real(r8)         , intent(inout) :: planet_radius    ! radius ~ m
+    real(r8)         , intent(inout) :: surface_gravity  ! gravity ~ m/s^2
+    real(r8)         , intent(inout) :: diurnal ! Length of diurnal period, solar-day ~ s
+    real(r8)         , intent(inout) :: ndays   ! scaler to number of Earth days
+    real(r8)         , intent(inout) :: porb    ! orbital period in Earth Days, for obliquity/eccentricity cycles
+    real(r8)         , intent(inout) :: sday    ! sidereal period
+    integer          , intent(out)   :: rc     ! output error
+
+    character(len=*) , parameter :: subname = "(clm_exo_orbital_update)"
+    !-------------------------------------------
+
+    planet_radius = orb_exo_planet_radius
+    surface_gravity = orb_exo_surface_gravity
+    diurnal = orb_exo_diurnal
+    ndays = orb_exo_ndays
+    porb = orb_exo_porb
+    sday = orb_exo_sday
+    rc = ESMF_SUCCESS
+  end subroutine clm_exo_orbital_update
+  #endif
   subroutine CheckImport(gcomp, rc)
     type(ESMF_GridComp) :: gcomp
     integer, intent(out) :: rc

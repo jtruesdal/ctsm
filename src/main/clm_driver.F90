@@ -1,3 +1,4 @@
+#define planet_mars
 module clm_driver
 
   !-----------------------------------------------------------------------
@@ -15,8 +16,12 @@ module clm_driver
   use clm_varctl             , only : use_crop, irrigate, ndep_from_cpl
   use clm_varctl             , only : use_soil_moisture_streams, fates_radiation_model
   use clm_varctl             , only : use_cropcal_streams, is_cold_start, nsrest, nsrStartup
-  use clm_time_manager       , only : get_nstep, is_beg_curr_day, is_beg_curr_year
-  use clm_time_manager       , only : get_prev_date, is_first_step
+  use clm_time_manager       , only : get_nstep, is_beg_curr_day, is_beg_curr_year, &
+                                      get_prev_date, is_first_step
+#ifdef planet_mars
+  use clm_time_manager       , only : get_step_size, get_curr_calday, get_rad_step_size, get_curr_date
+  use clm_varorb             , only : exo_ndays, exo_rad_step, exo_sday,exo_porb ! MARS MOD: Import exoplanet orbital scalers
+#endif
   use clm_varpar             , only : nlevsno, nlevgrnd
   use shr_infnan_mod         , only : nan => shr_infnan_nan, assignment(=)
   use clm_varorb             , only : obliqr
@@ -165,6 +170,15 @@ contains
     ! pgi 14.7 ('normalize_forall_array: non-conformable'), which appears in the call to
     ! CalcIrrigationNeeded. Simply declaring this variable makes the ICE go away.
     real(r8), allocatable :: dummy1_to_make_pgi_happy(:)
+
+#ifdef planet_mars
+    real(r8) :: abs_earth_days
+    real(r8) :: mars_calday
+    real(r8) :: mars_frac_day
+    real(r8) :: dt_avg
+    real(r8) :: dt_avg_mars
+    real(r8) :: curr_calday
+#endif
     !-----------------------------------------------------------------------
 
     ! Determine processor bounds and clumps for this processor
@@ -1274,24 +1288,87 @@ contains
        ! Determine albedos for next time step
        ! ============================================================================
 
-       ! This is only relevant to  fates two stream to not break sun fraction calculations
-       ! on the second timestep after start from finidat or for hybrid run.
-       ! The first clause is to maintain b4b with base, but is not necessary.
-       
-       if (use_fates .and. .not.doalb ) then
-          if ( (is_cold_start .and. get_nstep() == 1) .or. & 
-              ((fates_radiation_model == 'twostream') .and. (get_nstep()== 1) .and. (.not.use_fates_sp) &
-                .and. (.not.is_cold_start) .and. (nsrest == nsrStartup)) ) then
+#ifdef planet_mars
+       ! MARS MOD: Predictive Orbital Calculations
+       if (doalb) then
+          ! 1. Establish absolute timeline to prevent Year-Boundary teleportation
+          curr_calday = get_curr_calday()
+          call get_curr_date(yr, mon, day, sec)
+
+          ! 2. Handle year rollover for the predictive target
+          ! If the target day is smaller than today, the next window is in the next year
+          if (nextsw_cday < curr_calday) then
+             abs_earth_days = real(yr, r8) * 365.0_r8 + (nextsw_cday - 1.0_r8)
+          else
+             abs_earth_days = real(yr - 1, r8) * 365.0_r8 + (nextsw_cday - 1.0_r8)
+          end if
+
+          ! 3. Map seasonal cycle (687 days)
+          mars_calday = mod(abs_earth_days, exo_porb) + 1.0_r8
+
+          ! 4. Map diurnal cycle (Mars fractional day)
+          mars_frac_day = (abs_earth_days / exo_ndays) - FLOOR(abs_earth_days / exo_ndays)
+
+          ! 5. Calculate scaled integration window
+          dt_avg = real(get_step_size(), r8)
+          dt_avg_mars = dt_avg * (86400.0_r8 / exo_sday)
+
+          ! -------------------------------------------------------------
+          ! LND DIAGNOSTIC TRAP: Verify predictive orbital mapping
+          ! -------------------------------------------------------------
+          if (masterproc .and. nc == 1) then
+             write(iulog,*) '=== LND PREDICTIVE ORBITAL TRAP ==='
+             write(iulog,*) 'LND curr_calday   = ', curr_calday
+             write(iulog,*) 'LND nextsw_cday   = ', nextsw_cday
+             write(iulog,*) 'LND Abs days      = ', abs_earth_days
+             write(iulog,*) 'LND mars_calday   = ', mars_calday
+             write(iulog,*) 'LND mars_frac_day = ', mars_frac_day
+             write(iulog,*) 'LND dt_avg_mars   = ', dt_avg_mars
+             write(iulog,*) '==================================='
+          endif
+       end if
+#endif
+       if (.not.doalb) then
+
+
+          if(use_fates) then
+             ! During branch runs and non continue_run restarts, the doalb flag
+             ! does not trigger correctly for fates runs (and non-fates?), and thus
+             ! the zenith angles are not calculated and ready when radiation scattering
+             ! needs to occur.
+#ifdef planet_mars
+             call UpdateZenithAngles(bounds_clump, surfalb_inst, nextsw_cday, declinp1, dt_avg_mars, mars_frac_day)
+#else
              call UpdateZenithAngles(bounds_clump, surfalb_inst, nextsw_cday, declinp1)
+#endif
              call clm_fates%wrap_canopy_radiation(bounds_clump, nc, &
                   water_inst%waterdiagnosticbulk_inst%fcansno_patch(bounds_clump%begp:bounds_clump%endp), &
                   surfalb_inst)
-          endif
-       endif
+          end if
 
-       if (doalb) then
+       else
+
           ! Albedos for non-urban columns
           call t_startf('surfalb')
+#ifdef planet_mars
+          call SurfaceAlbedo(bounds_clump,                      &
+               nc,                                              &
+               filter_inactive_and_active(nc)%num_nourbanc,     &
+               filter_inactive_and_active(nc)%nourbanc,         &
+               filter_inactive_and_active(nc)%num_nourbanp,     &
+               filter_inactive_and_active(nc)%nourbanp,         &
+               filter_inactive_and_active(nc)%num_urbanc,       &
+               filter_inactive_and_active(nc)%urbanc,           &
+               filter_inactive_and_active(nc)%num_urbanp,       &
+               filter_inactive_and_active(nc)%urbanp,           &
+               nextsw_cday, declinp1,                           &
+               clm_fates,                                       &
+               aerosol_inst, canopystate_inst, &
+               water_inst%waterstatebulk_inst, &
+               water_inst%waterdiagnosticbulk_inst, &
+               lakestate_inst, temperature_inst, surfalb_inst, &
+               dt_avg_mars, mars_frac_day)
+#else
           call SurfaceAlbedo(bounds_clump,                      &
                nc,                                              &
                filter_inactive_and_active(nc)%num_nourbanc,     &
@@ -1308,7 +1385,7 @@ contains
                water_inst%waterstatebulk_inst, &
                water_inst%waterdiagnosticbulk_inst, &
                lakestate_inst, temperature_inst, surfalb_inst)
-
+#endif
           call t_stopf('surfalb')
 
           ! Albedos for urban columns
@@ -1630,7 +1707,13 @@ contains
          do f = 1, num_nolakec
             c = filter_nolakec(f)
             if (j >= snl(c) + 1) then
-               frac_iceold(c,j) = h2osoi_ice(c,j)/(h2osoi_liq(c,j)+h2osoi_ice(c,j))
+               ! Add a safety guard to prevent division by zero in completely dry columns
+               if ((h2osoi_liq(c,j) + h2osoi_ice(c,j)) > 0.0_r8) then
+                  frac_iceold(c,j) = h2osoi_ice(c,j)/(h2osoi_liq(c,j)+h2osoi_ice(c,j))
+               else
+                  ! If the layer is completely empty, the ice fraction is 0.0
+                  frac_iceold(c,j) = 0.0_r8
+               end if
             end if
          end do
       end do
