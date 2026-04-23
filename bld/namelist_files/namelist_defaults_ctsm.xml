@@ -17,6 +17,13 @@ attributes from the config_cache.xml file (with keys converted to upper-case).
 <!-- Default resolution -->
 <res>0.9x1.25</res>
 
+<!-- Default Planet -->
+<planet_mode>earth</planet_mode>
+
+<fsurdat planet_mode="mars" >/glade/p/cesmdata/inputdata/lnd/clm2/surfdata_esmf/ctsm5.4.0/surfdata_ne16np4_mars_desert_GLOBAL_LAND.nc</fsurdat>
+
+<finidat planet_mode="mars" hgrid="ne16np4" >/glade/p/cesmdata/inputdata/lnd/clm2/initdata_esmf/ctsm5.4/FMARSEXORT.ne16_ne16.cesm3_planets.020626.L32.4node.121.clm2.r.0001-03-01-00000.nc</finidat>
+
 <sim_year>2000</sim_year>
 
 <!-- CO2 volume mixing ratio -->

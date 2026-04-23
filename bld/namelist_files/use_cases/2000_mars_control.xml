@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+
+<namelist_defaults>
+
+<use_case_desc>Conditions to simulate Mars desert planet</use_case_desc>
+<glacier_region_behavior>'multiple','multiple','multiple','multiple','multiple','multiple','multiple','multiple','multiple','multiple','multiple'</glacier_region_behavior>
+<use_init_interp>.false.</use_init_interp>
+<use_luna>.false.</use_luna>
+<use_hydrstress>.false.</use_hydrstress>
+<use_bedrock>.true.</use_bedrock>
+<irrigate>.false.</irrigate>
+<use_excess_ice>.false.</use_excess_ice>
+<z0param_method>'ZengWang2007'</z0param_method>
+<dust_emis_method>'Zender_2003'</dust_emis_method>
+<calc_human_stress_indices>'NONE'</calc_human_stress_indices>
+<use_excess_ice>.false.</use_excess_ice>
+<use_excess_ice_streams>.false.</use_excess_ice_streams>
+<use_crop>.false.</use_crop>
+<urban_hac>'OFF'</urban_hac>
+<urban_traffic>.false.</urban_traffic>
+<collapse_urban>.true.</collapse_urban>
+<cropcals_rx>.false.</cropcals_rx>
+<cropcals_rx_adapt>.false.</cropcals_rx_adapt>
+<use_clm5_fpi>.false.</use_clm5_fpi>
+<use_biomass_heat_storage>.false.</use_biomass_heat_storage>
+<modifyphoto_and_lmr_forcrop>.false.</modifyphoto_and_lmr_forcrop>
+<do_sno_oc>.false.</do_sno_oc>
+<snicar_snobc_intmix>.false.</snicar_snobc_intmix>
+
+</namelist_defaults>

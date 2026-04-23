@@ -2488,6 +2488,11 @@ Command line arguement for biogeochemistry mode for CLM4.5
    fates = FATES Functionally Assembled Terrestrial Ecosystem Simulator (ecosystem demography model with below ground BGC):
 </entry>
 
+<entry id="planet_mode" type="char*16" category="default_settings"
+       group="clm_inparm" valid_values="earth,mars">
+  Planetary mode for the simulation. Used to redirect default datasets for exo-planets.
+</entry>
+
 <!-- ========================================================================================  -->
 <!-- namelist elements associated with the vertical CN model                                   -->
 <!-- ========================================================================================  -->

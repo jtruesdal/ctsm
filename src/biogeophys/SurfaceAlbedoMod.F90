@@ -1,4 +1,3 @@
-#define planet_mars
 module SurfaceAlbedoMod
 
 #include "shr_assert.h"
