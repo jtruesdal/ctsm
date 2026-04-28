@@ -39,7 +39,68 @@ module clm_varcon
   !------------------------------------------------------------------
 
   real(r8), public :: rpi    = SHR_CONST_PI
+#ifdef planet_mars
+!------------------------------------------------------------------
+  ! Initialize physical constants
+  !------------------------------------------------------------------
 
+  real(r8), public, parameter :: secsphr = 3600._r8                 ! Seconds in an hour
+  integer,  public, parameter :: isecsphr = int(secsphr)            ! Integer seconds in an hour
+  integer,  public, parameter :: isecspmin= 60                      ! Integer seconds in a minute
+  real(r8), public :: sb     = SHR_CONST_STEBOL                     ! stefan-boltzmann constant  [W/m2/K4]
+  real(r8), public :: vkc    = SHR_CONST_KARMAN                     ! von Karman constant [-]
+  real(r8), public :: rwat   = SHR_CONST_RWV                        ! gas constant for water vapor [J/(kg K)]
+  real(r8), public :: cpliq  = SHR_CONST_CPFW                       ! Specific heat of water [J/kg-K]
+  real(r8), public :: cpice  = SHR_CONST_CPICE                      ! Specific heat of ice [J/kg-K]
+  real(r8), public :: hvap   = SHR_CONST_LATVAP                     ! Latent heat of evap for water [J/kg]
+  real(r8), public :: hsub   = SHR_CONST_LATSUB                     ! Latent heat of sublimation    [J/kg]
+  real(r8), public :: hfus   = SHR_CONST_LATICE                     ! Latent heat of fusion for ice [J/kg]
+  real(r8), public :: denh2o = SHR_CONST_RHOFW                      ! density of liquid water [kg/m3]
+  real(r8), public :: denice = SHR_CONST_RHOICE                     ! density of ice [kg/m3]
+  real(r8), public :: rgas   = SHR_CONST_RGAS                       ! universal gas constant [J/K/kmole]
+  real(r8), public :: pstd   = SHR_CONST_PSTD                       ! standard pressure [Pa]
+
+  !------------------------------------------------------------------
+  ! Planet-Specific Overrides and Derived Variables
+  !------------------------------------------------------------------
+  ! Base Constants from physconst_nl
+  real(r8), public :: grav   = 3.72076_r8                           ! gravity constant [m/s2]
+  real(r8), public :: cpair  = 735.0_r8                             ! specific heat of dry air [J/kg/K]
+  real(r8), public :: re     = 3.38992e6_r8 * 0.001_r8              ! radius of planet (km)
+  real(r8), public, parameter :: secspday = 88642.0_r8              ! Seconds per day
+  real(r8), public :: watmin = 1.0e-15_r8                           ! minimum soil moisture (mm)
+  real(r8), public :: csol_bedrock = 2.0e6_r8 / 100._r8             ! Mars bedrock heat capacity
+
+  ! Derived Constants (Using mwdry = 43.34)
+  real(r8), public :: rair   = SHR_CONST_RGAS / 43.34_r8            ! gas constant for dry air [J/kg/K]
+  real(r8), public :: roverg = SHR_CONST_RWV / 3.72076_r8 * 1000._r8! Rw/g constant mm/K
+  real(r8), public, parameter :: wv_to_dair_weight_ratio = SHR_CONST_MWWV / 43.34_r8 
+  real(r8), public :: zvir   = (43.34_r8 / SHR_CONST_MWWV) - 1.0_r8 ! Virtual temp multiplier
+
+  ! Planet-Agnostic Derived Daily Constants
+  integer,  public, parameter :: isecspday = secspday               ! Integer seconds per day
+  real(r8), public, parameter :: degpsec   = 360._r8 / secspday     ! Degrees planet rotates per second
+
+  !------------------------------------------------------------------
+  ! General Modeling Constants
+  !------------------------------------------------------------------
+  real(r8), public :: tkair  = 0.023_r8                             ! thermal conductivity of air   [W/m/K]
+  real(r8), public :: tkice  = 2.290_r8                             ! thermal conductivity of ice   [W/m/K]
+  real(r8), public :: tkwat  = 0.57_r8                              ! thermal conductivity of water [W/m/K]
+  real(r8), public, parameter :: tfrz   = SHR_CONST_TKFRZ           ! freezing temperature [K]
+  real(r8), public, parameter :: tcrit  = 2.5_r8                    ! critical temperature to determine rain or snow
+  real(r8), public :: o2_molar_const = 0.209_r8                     ! constant atmospheric O2 molar ratio (mol/mol)
+  real(r8), public :: oneatm = 1.01325e5_r8                         ! one standard atmospheric pressure [Pa]
+  real(r8), public :: bdsno = 250._r8                               ! bulk density snow (kg/m**3)
+  real(r8), public :: alpha_aero = 1.0_r8                           ! constant for aerodynamic parameter weighting
+  real(r8), public :: tlsai_crit = 2.0_r8                           ! critical value of elai+esai for which aerodynamic parameters are maximum
+  real(r8), public :: c_water = SHR_CONST_CPFW                      ! specific heat of water   [J/kg/K]
+  real(r8), public :: c_dry_biomass  = 1400_r8                      ! specific heat of dry biomass
+  integer, public, parameter  :: fun_period  = 1                    ! A FUN parameter
+  real(r8),public, parameter  :: smallValue  = 1.e-12_r8            ! A small values used by FUN
+  real(r8),public, parameter  :: sum_to_1_tol = 1.e-13_r8           ! error tolerance
+
+#else
   !------------------------------------------------------------------
   ! Initialize physical constants
   !------------------------------------------------------------------
@@ -78,11 +139,7 @@ module clm_varcon
   real(r8), public :: bdsno = 250._r8                               ! bulk density snow (kg/m**3)
   real(r8), public :: alpha_aero = 1.0_r8                           ! constant for aerodynamic parameter weighting
   real(r8), public :: tlsai_crit = 2.0_r8                           ! critical value of elai+esai for which aerodynamic parameters are maximum
-#ifdef planet_mars
-  real(r8), public :: watmin = 1.0e-15_r8                              ! minimum soil moisture (mm)
-#else
   real(r8), public :: watmin = 0.01_r8                              ! minimum soil moisture (mm) For Mars this causes frost planet except for initial terminator.
-#endif
   real(r8), public :: c_water = SHR_CONST_CPFW                      ! specific heat of water   [J/kg/K]
   real(r8), public :: c_dry_biomass  = 1400_r8                      ! specific heat of dry biomass
 
@@ -95,7 +152,8 @@ module clm_varcon
   integer, public, parameter  :: fun_period  = 1            ! A FUN parameter, and probably needs to be changed for testing
   real(r8),public, parameter  :: smallValue  = 1.e-12_r8    ! A small values used by FUN
   real(r8),public, parameter  :: sum_to_1_tol = 1.e-13_r8   ! error tolerance 
-
+  real(r8), public :: csol_bedrock = 2.0e6_r8 ! vol. heat capacity of granite/sandstone  J/(m3 K)(Shabbir, 2000)
+#endif
   ! ------------------------------------------------------------------------
   ! Special value flags
   ! ------------------------------------------------------------------------
@@ -122,9 +180,8 @@ module clm_varcon
 
   real(r8), public :: thk_bedrock = 3.0_r8  ! thermal conductivity of 'typical' saturated granitic rock 
                                     ! (Clauser and Huenges, 1995)(W/m/K)
-  real(r8), public :: csol_bedrock = 2.0e6_r8 ! vol. heat capacity of granite/sandstone  J/(m3 K)(Shabbir, 2000)
-  real(r8), public, parameter :: zmin_bedrock = 0.4_r8 ! minimum soil depth [m]
 
+  real(r8), public, parameter :: zmin_bedrock = 0.4_r8 ! minimum soil depth [m]
   real(r8), public, parameter :: aquifer_water_baseline = 5000._r8 ! baseline value for water in the unconfined aquifer [mm]
   real(r8), public, parameter :: c_to_b = 2.0_r8         ! conversion between mass carbon and total biomass (g biomass /g C)
   ! Some non-tunable conversions (may need to place elsewhere)

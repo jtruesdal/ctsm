@@ -29,6 +29,9 @@ module UrbanFluxesMod
   use LandunitType         , only : lun                
   use ColumnType           , only : col                
   use PatchType            , only : patch                
+#ifdef planet_mars
+  use clm_varcon           , only : zvir
+#endif
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -403,10 +406,18 @@ contains
          g = lun%gridcell(l)
 
          thm_g(l) = forc_t(g) + lapse_rate*forc_hgt_t_patch(lun%patchi(l))
+#ifdef planet_mars
+         thv_g(l) = forc_th(g)*(1._r8+zvir*forc_q(g))
+#else
          thv_g(l) = forc_th(g)*(1._r8+0.61_r8*forc_q(g))
+#endif
          dth(l)   = thm_g(l)-taf(l)
          dqh(l)   = forc_q(g)-qaf(l)
+#ifdef planet_mars
+         dthv     = dth(l)*(1._r8+zvir*forc_q(g))+zvir*forc_th(g)*dqh(l)
+#else
          dthv     = dth(l)*(1._r8+0.61_r8*forc_q(g))+0.61_r8*forc_th(g)*dqh(l)
+#endif
          zldis(l) = forc_hgt_u_patch(lun%patchi(l)) - z_d_town(l)
 
          ! Initialize Monin-Obukhov length and wind speed including convective velocity
@@ -652,7 +663,11 @@ contains
             dqh(l) = forc_q(g)-qaf(l)
             tstar = temp1(l)*dth(l)
             qstar = temp2(l)*dqh(l)
+#ifdef planet_mars
+            thvstar = tstar*(1._r8+zvir*forc_q(g)) + zvir*forc_th(g)*qstar
+#else
             thvstar = tstar*(1._r8+0.61_r8*forc_q(g)) + 0.61_r8*forc_th(g)*qstar
+#endif
             zeta_lunit(l) = zldis(l)*vkc*grav*thvstar/(ustar(l)**2*thv_g(l))
 
             if (zeta_lunit(l) >= 0._r8) then                   !stable

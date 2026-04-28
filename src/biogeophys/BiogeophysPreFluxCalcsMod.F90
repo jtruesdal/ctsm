@@ -34,6 +34,9 @@ module BiogeophysPreFluxCalcsMod
   use WaterStateBulkType      , only : waterstatebulk_type
   use SurfaceResistanceMod    , only : calc_soilevap_resis
   use WaterFluxBulkType     , only : waterfluxbulk_type
+#ifdef planet_mars
+  use clm_varcon           , only : zvir
+#endif
 
   !
   ! !PUBLIC TYPES:
@@ -347,6 +350,9 @@ contains
           else
              emg(c) = (1._r8-frac_sno(c))*0.96_r8 + frac_sno(c)*0.97_r8
           end if
+#ifdef planet_mars
+          emg(c) = 1._r8
+#endif
        end if
 
        ! Latent heat. We arbitrarily assume that the sublimation occurs
@@ -361,7 +367,11 @@ contains
        ! reference height
        beta(c) = 1._r8
        zii(c)  = 1000._r8
+#ifdef planet_mars
+       thv(c)  = forc_th(c)*(1._r8+zvir*forc_q(c))
+#else
        thv(c)  = forc_th(c)*(1._r8+0.61_r8*forc_q(c))
+#endif
     end do
 
     do fp = 1, num_nolakep

@@ -24,6 +24,9 @@ module BareGroundFluxesMod
   use LandunitType         , only : lun                
   use ColumnType           , only : col                
   use PatchType            , only : patch                
+#ifdef planet_mars
+  use clm_varcon           , only : zvir
+#endif
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -314,7 +317,12 @@ contains
          ur(p)    = max(params_inst%wind_min,sqrt(forc_u(g)*forc_u(g)+forc_v(g)*forc_v(g)))
          dth(p)   = thm(p)-t_grnd(c)
          dqh(p)   = forc_q(c) - qg(c)
+
+#ifdef planet_mars
+         dthv     = dth(p)*(1._r8+zvir*forc_q(c))+zvir*forc_th(c)*dqh(p)
+#else
          dthv     = dth(p)*(1._r8+0.61_r8*forc_q(c))+0.61_r8*forc_th(c)*dqh(p)
+#endif
          zldis(p) = forc_hgt_u_patch(p)
 
          ! Copy column roughness to local patch-level arrays
@@ -368,7 +376,11 @@ contains
             forc_hgt_t_patch(p) = forc_hgt_t(g) + z0hg_patch(p) + displa(p)
             forc_hgt_q_patch(p) = forc_hgt_q(g) + z0qg_patch(p) + displa(p)
 
+#ifdef planet_mars
+            thvstar = tstar*(1._r8+zvir*forc_q(c)) + zvir*forc_th(c)*qstar
+#else
             thvstar = tstar*(1._r8+0.61_r8*forc_q(c)) + 0.61_r8*forc_th(c)*qstar
+#endif
             zeta(p) = zldis(p)*vkc*grav*thvstar/(ustar(p)**2*thv(c))
 
             if (zeta(p) >= 0._r8) then                   !stable

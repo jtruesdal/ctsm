@@ -49,6 +49,9 @@ module CanopyFluxesMod
   use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
   use LunaMod               , only : Update_Photosynthesis_Capacity, Acc24_Climate_LUNA,Acc240_Climate_LUNA,Clear24_Climate_LUNA
   use NumericsMod           , only : truncate_small_values
+#ifdef planet_mars
+  use clm_varcon           , only : zvir
+#endif
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -983,7 +986,11 @@ bioms:   do f = 1, fn
          dth(p) = thm(p)-taf(p)
          dqh(p) = forc_q(c)-qaf(p)
          delq(p) = qg(c) - qaf(p)
+#ifdef planet_mars
+         dthv(p) = dth(p)*(1._r8+zvir*forc_q(c))+zvir*forc_th(c)*dqh(p)
+#else
          dthv(p) = dth(p)*(1._r8+0.61_r8*forc_q(c))+0.61_r8*forc_th(c)*dqh(p)
+#endif
          zldis(p) = forc_hgt_u_patch(p) - displa(p)
 
          ! Check to see if the forcing height is below the canopy height
@@ -1397,7 +1404,11 @@ bioms:   do f = 1, fn
             tstar = temp1(p)*dth(p)
             qstar = temp2(p)*dqh(p)
 
+#ifdef planet_mars
+            thvstar = tstar*(1._r8+zvir*forc_q(c)) + zvir*forc_th(c)*qstar
+#else
             thvstar = tstar*(1._r8+0.61_r8*forc_q(c)) + 0.61_r8*forc_th(c)*qstar
+#endif
             zeta(p) = zldis(p)*vkc*grav*thvstar/(ustar(p)**2*thv(c))
 
             if (zeta(p) >= 0._r8) then     !stable

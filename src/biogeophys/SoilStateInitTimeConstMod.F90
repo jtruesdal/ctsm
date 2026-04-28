@@ -587,7 +587,11 @@ contains
 
                 soilstate_inst%csol_col(c,lev)   = ((1._r8-om_frac)*(params_inst%csol_sand*sand+ &
                      params_inst%csol_clay*clay) / (sand+clay) + params_inst%csol_om*om_frac)*1.e6_r8  ! J/(m3 K)
-
+#ifdef planet_mars
+                ! Reduce soil heat capacity by a factor of 100 to simulate Mars regolith thermal inertia.
+                ! This prevents the soil from acting as an Earth-like thermal battery.
+                soilstate_inst%csol_col(c,lev) = soilstate_inst%csol_col(c,lev) / 100._r8
+#endif
                 soilstate_inst%watdry_col(c,lev) = soilstate_inst%watsat_col(c,lev) * &
                      (316230._r8/soilstate_inst%sucsat_col(c,lev)) ** (-1._r8/soilstate_inst%bsw_col(c,lev)) 
                 soilstate_inst%watopt_col(c,lev) = soilstate_inst%watsat_col(c,lev) * &
@@ -690,6 +694,12 @@ contains
                                        params_inst%tkd_om * om_frac
              soilstate_inst%csol_col(c,lev)   = ((1._r8-om_frac)*(params_inst%csol_sand*sand+ &
                                        params_inst%csol_clay*clay) / (sand+clay) + params_inst%csol_om * om_frac)*1.e6_r8 ! J/(m3 K)
+#ifdef planet_mars
+             ! Reduce soil heat capacity by a factor of 100 to simulate Mars regolith thermal inertia.
+             ! This prevents the soil from acting as an Earth-like thermal battery.
+             soilstate_inst%csol_col(c,lev) = soilstate_inst%csol_col(c,lev) / 100._r8
+#endif
+
              soilstate_inst%watdry_col(c,lev) = soilstate_inst%watsat_col(c,lev) &
                   * (316230._r8/soilstate_inst%sucsat_col(c,lev)) ** (-1._r8/soilstate_inst%bsw_col(c,lev))
              soilstate_inst%watopt_col(c,lev) = soilstate_inst%watsat_col(c,lev) &

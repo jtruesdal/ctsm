@@ -36,8 +36,11 @@ module LakeCon
 
   ! lake emissivity. This is used for both frozen and unfrozen lakes. 
   ! This is pulled in from CLM4 and the reference is unclear.
+#ifdef planet_mars
+  real(r8), public, parameter :: emg_lake = 1.0_r8
+#else
   real(r8), public, parameter :: emg_lake = 0.97_r8
-
+#endif
   ! The fraction of the visible (e.g. vis not nir from atm) sunlight
   ! absorbed in ~1 m of water (the surface layer za_lake).
   ! This is roughly the fraction over 700 nm but may depend on the details
