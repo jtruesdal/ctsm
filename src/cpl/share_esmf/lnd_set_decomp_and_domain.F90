@@ -512,7 +512,6 @@ contains
     type(ESMF_DistGrid)    :: distgrid_mask
     integer  , pointer     :: gindex_input(:) ! global index space for land and ocean points
     integer  , pointer     :: lndmask_loc(:)
-    integer  , pointer     :: itemp_glob(:)
     real(r8) , pointer     :: maskmask_loc(:) ! on ocean mesh
     real(r8) , pointer     :: maskfrac_loc(:) ! on land mesh
     real(r8) , pointer     :: dataptr1d(:)
@@ -539,7 +538,12 @@ contains
     klen = len_trim(flandfrac) - 3 ! remove the .nc
     flandfrac_status = flandfrac(1:klen)//'.status'
 
-    allocate(lndmask_glob(gsize)); lndmask_glob(:) = 0
+    ! Allocate the global land mask once per shared-memory node (not once per rank).
+    ! Leader zeroes it; the compute branch below fills disjoint local points on each
+    ! rank and sums across nodes (shr_mpishmem_leader_allreduce_sum_i4).
+    call shr_mpishmem_alloc_i4_1d(mpicom, lndmask_glob, lndmask_win, gsize)
+    if (shr_mpishmem_is_leader(mpicom)) lndmask_glob(:) = 0
+    call shr_mpishmem_fence(lndmask_win)
 
     ! Determine if lndfrac/lndmask file exists
     inquire(file=trim(flandfrac), exist=lexist)
