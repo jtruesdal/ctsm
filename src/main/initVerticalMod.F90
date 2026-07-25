@@ -653,6 +653,9 @@ contains
     end do
     deallocate(std)
 
+    ! Close surface dataset - all reads complete (STD_ELEV was the last read)
+    call ncd_pio_closefile(ncid)
+
     !-----------------------------------------------
     ! SCA shape function defined
     !-----------------------------------------------
@@ -668,10 +671,6 @@ contains
        endif
 
     end do
-
-    call ncd_pio_closefile(ncid)
-
-    call t_stopf('initVertical')
 
   end subroutine initVertical
 
