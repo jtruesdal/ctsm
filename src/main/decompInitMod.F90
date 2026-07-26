@@ -19,7 +19,7 @@ module decompInitMod
   private
   !
   ! !PUBLIC TYPES:
-  !b
+  !
   ! !PUBLIC MEMBER FUNCTIONS:
   public :: decompInit_lnd    ! initializes lnd grid decomposition into clumps and processors
   public :: decompInit_clumps ! initializes atm grid decomposition into clumps
