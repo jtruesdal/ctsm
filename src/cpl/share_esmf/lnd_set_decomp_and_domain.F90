@@ -167,7 +167,11 @@ contains
     ! Get JUST gridcell processor bounds
     ! Remaining bounds (landunits, columns, patches) will be set after calling decompInit_glcp
     ! so get_proc_bounds is called twice and the gridcell information is just filled in twice
-    call get_proc_bounds(bounds, allow_errors = .true.)
+!!$<<<<<<< HEAD
+!!$    call get_proc_bounds(bounds, allow_errors = .true.)
+!!$=======
+    call get_proc_bounds(bounds, only_gridcell=.true.)
+!!$>>>>>>> ctsm5.4.057
     begg = bounds%begg
     endg = bounds%endg
 
@@ -391,7 +395,11 @@ contains
     call t_stopf ('decompInit_lnd')
 
     ! Initialize processor bounds
-    call get_proc_bounds(bounds, allow_errors = .true.) ! only_gridcell since decomp not fully initialized
+!!$<<<<<<< HEAD
+!!$    call get_proc_bounds(bounds, allow_errors = .true.) ! only_gridcell since decomp not fully initialized
+!!$=======
+    call get_proc_bounds(bounds, only_gridcell=.true.) ! only_gridcell since decomp not fully initialized
+!!$>>>>>>> ctsm5.4.057
 
     ! Initialize domain data structure
     call domain_init(domain=ldomain, isgrid2d=.false., ni=1, nj=1, nbeg=1, nend=1)

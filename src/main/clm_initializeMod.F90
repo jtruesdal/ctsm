@@ -163,6 +163,7 @@ contains
     use CIsoAtmTimeseriesMod          , only : CIsoAtmReadNML
     use DaylengthMod                  , only : InitDaylength
     use dynSubgridDriverMod           , only : dynSubgrid_init
+    use dynConsBiogeophysMod          , only : dynConsBiogeophys_readnl
     use dynConsBiogeophysMod          , only : dyn_hwcontent_set_baselines
     use fileutils                     , only : getfil
     use initInterpMod                 , only : initInterp
@@ -227,7 +228,11 @@ contains
 
     call t_startf('clm_init2_part1')
     ! Get processor bounds for gridcells, just for gridcells
-    call get_proc_bounds(bounds_proc, allow_errors=.true.)  ! Just get proc bounds for gridcells, other variables won't be set until adter decompInit_clumps
+!!$<<<<<<< HEAD
+!!$    call get_proc_bounds(bounds_proc, allow_errors=.true.)  ! Just get proc bounds for gridcells, other variables won't be set until adter decompInit_clumps
+!!$=======
+    call get_proc_bounds(bounds_proc, only_gridcell=.true.)  ! Just get proc bounds for gridcells, other variables won't be set until after decompInit_clumps
+!!$>>>>>>> ctsm5.4.057
     begg = bounds_proc%begg; endg = bounds_proc%endg
 
     ! Initialize glc behavior
@@ -388,6 +393,11 @@ contains
     if ( .not. for_testing_bypass_init_after_self_tests() )then
     ! Initialize Balance checking (after time-manager)
     call BalanceCheckInit()
+
+    ! Read the dyn_cons_biogeophys_inparm namelist. This must be done after the time
+    ! manager is initialized, because converting dynbal_storage_residence_time to a
+    ! turnover rate depends on the model calendar.
+    call dynConsBiogeophys_readnl(NLFilename)
 
     ! History file variables
     if (use_cn .and. .not. use_noio ) then

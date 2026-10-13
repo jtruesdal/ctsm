@@ -1,9 +1,11 @@
 module decompInitMod
 
+#include "shr_assert.h"
+
   !------------------------------------------------------------------------------
   ! !DESCRIPTION:
-  ! Module provides a descomposition into a clumped data structure which can
-  ! be mapped back to atmosphere physics chunks.
+  ! Module provides a decomposition into a clumped data structure for the land
+  ! model with gridcells assigned to clumps in a round-robin fashion to processors.
   !
   ! !USES:
   use shr_kind_mod , only : r8 => shr_kind_r8
@@ -32,7 +34,6 @@ module decompInitMod
   !
   ! !PRIVATE TYPES:
   integer, pointer   :: lcid(:)          ! temporary for setting decomposition, allocated set and used in decompInit_lnd, and used and deallocated in decompInit_clumps  (Can make it allocatable)
-  integer            :: nglob_x, nglob_y ! global sizes
   integer, parameter :: dbug=0           ! 0 = min, 1=normal, 2=much, 3=max
   character(len=*), parameter :: sourcefile = &
        __FILE__
@@ -55,11 +56,7 @@ contains
     use clm_varctl , only : nsegspc
     use decompMod  , only : gindex_global, nclumps, clumps
     use decompMod  , only : bounds_type, get_proc_bounds, procinfo
-    ! Temporary testing stuff
-    use Assertions, only : assert_equal
-    use decompMod  , only : processor_type, get_global_index, subgrid_level_gridcell
-    use decompMod  , only : clump_type
-    ! end temporary testing stuff
+    use decompMod  , only : nglob_x, nglob_y
     !
     ! !ARGUMENTS:
     integer , intent(in) :: amask(:)
@@ -80,10 +77,6 @@ contains
     !---------------------------------------------------------------------
     type(bounds_type) :: bounds       ! contains subgrid bounds data
     !---------------------------------------------------------------------
-    ! Temporary testing stuff
-    real(r8) :: msize, mrss
-    ! end temporary testing stuff
-    !---------------------------------------------------------------------
     integer :: i, j, g, lc, cid_previous    ! Indices
     integer :: cell_id_offset               ! The offset for the starting gridcell number for this processor
     integer :: begcid, endcid               ! Beginning and ending cid's for this processor
@@ -99,45 +92,9 @@ contains
     call decompInit_lnd_allocate( ier )
     if (ier /= 0) return
 
-    call memcheck('decompInit_lnd: after allocate')
+    ! Initialize clumps
 
-    ! Initialize procinfo and clumps
-    ! beg and end indices initialized for simple addition of cells later
-
-    procinfo%nclumps   = clump_pproc
-    procinfo%cid(:)    = -1
-    procinfo%ncells    = 0
-    procinfo%nlunits   = 0
-    procinfo%ncols     = 0
-    procinfo%npatches  = 0
-    procinfo%nCohorts  = 0
-    procinfo%begg      = 1
-    procinfo%begl      = 1
-    procinfo%begc      = 1
-    procinfo%begp      = 1
-    procinfo%begCohort = 1
-    procinfo%endg      = 0
-    procinfo%endl      = 0
-    procinfo%endc      = 0
-    procinfo%endp      = 0
-    procinfo%endCohort = 0
-
-    clumps(:)%owner     = -1
-    clumps(:)%ncells    = 0
-    clumps(:)%nlunits   = 0
-    clumps(:)%ncols     = 0
-    clumps(:)%npatches  = 0
-    clumps(:)%nCohorts  = 0
-    clumps(:)%begg      = 1
-    clumps(:)%begl      = 1
-    clumps(:)%begc      = 1
-    clumps(:)%begp      = 1
-    clumps(:)%begCohort = 1
-    clumps(:)%endg      = 0
-    clumps(:)%endl      = 0
-    clumps(:)%endc      = 0
-    clumps(:)%endp      = 0
-    clumps(:)%endCohort = 0
+    call clumps(:)%Init()
 
     ! assign clumps to proc round robin
     cid = 0
@@ -148,7 +105,6 @@ contains
           call endrun(msg="Round robin pid error", file=sourcefile, line=__LINE__)
           return
        endif
-       !clumps(n)%owner = pid   ! This line should be able to be removed when clumps is only for the local task
        if (iam == pid) then
           clumps(n)%owner = pid
           cid = cid + 1
@@ -213,6 +169,11 @@ contains
     ! (Doing the following few lines of code removed about 50 lines of complex code
     !  as well as loops of size: ni*nj*nclumps, npes*nclumps, and ni*nj
     !  that was being done on each processor)
+    !
+    !---------------------------------------------------------------------
+    ! NOTE: Co-pilot pointed out that some MPI libraries have trouble with MPI_SCAN
+    !       for cases where the PE layout isn't a power of 2. So strange layouts
+    !       may have problems. However, the decomp_init test suite covers cases like this.
     !---------------------------------------------------------------------
     call MPI_SCAN(procinfo%ncells, cell_id_offset, 1, MPI_INTEGER, &
                   MPI_SUM, mpicom, ier)
@@ -225,7 +186,6 @@ contains
     ! ---- Set begg and endg each clump on this processor ----
     do lc = 1, clump_pproc
        cid = procinfo%cid(lc)
-       clumps(cid)%ncells = clumps(cid)%ncells     ! This line will be removed
        if ( lc == 1 )then
           clumps(cid)%begg = procinfo%begg
        else
@@ -238,7 +198,11 @@ contains
 
     ! Initialize global gindex (non-compressed, includes ocean points)
     ! Note that gindex_global goes from (1:endg)
-    call get_proc_bounds(bounds, allow_errors=.true.)    ! This has to be done after procinfo is finalized
+!!$<<<<<<< HEAD
+!!$    call get_proc_bounds(bounds, allow_errors=.true.)    ! This has to be done after procinfo is finalized
+!!$=======
+    call get_proc_bounds(bounds, only_gridcell=.true.)    ! This has to be done after procinfo is finalized
+!!$>>>>>>> ctsm5.4.057
     call decompInit_lnd_gindex_global_allocate( bounds, ier ) ! This HAS to be done after procinfo is finalized
     if (ier /= 0) return
 
@@ -258,9 +222,9 @@ contains
           if ( procinfo%cid(lc) == cid ) then
              if ( (g < procinfo%begg) .or. (g > procinfo%endg) )then
                 write(iulog,*) ' iam, g = ', iam, g
-                call endrun(msg='g out of bounds for MPI_SCAN test', file=sourcefile, line=__LINE__)
-             end if  
-             procinfo%ggidx(g) = ln
+                call endrun(msg='g out of bounds for MPI_SCAN', file=sourcefile, line=__LINE__)
+             end if
+             gindex_global(g-procinfo%begg+1) = ln
              g = g + 1
           end if
           end if
@@ -269,32 +233,19 @@ contains
     end do
     end do
 
-    ! ---- Get the global index for each gridcell and save the i,j incices for ach gridcell on this processor
-    do n = procinfo%begg,procinfo%endg
-        gindex_global(n-procinfo%begg+1) = procinfo%ggidx(n)    ! Change this to gindex_global when ready
-        call procinfo%calc_globalxy_indices( n, lni, lnj, i, j )
-        procinfo%gi(n) = i
-        procinfo%gj(n) = j
-    end do
-
-    !---------------------------------------------------------------------
-    ! General error checking that the decomposition data is setup correctly
-    !---------------------------------------------------------------------
-    begcid = procinfo%cid(1)
-    endcid = procinfo%cid(clump_pproc)
-    call assert_equal(clumps(begcid)%begg, procinfo%begg, &
+    call shr_assert(clumps(begcid)%begg == procinfo%begg, &
                       msg='decompInit_lnd(): clumps(begcid) begg does not match procinfo begg')
-    call assert_equal(clumps(endcid)%endg, procinfo%endg, &
+    call shr_assert(clumps(endcid)%endg == procinfo%endg, &
                       msg='decompInit_lnd(): clumps(endcid) endg does not match procinfo endg')
-    call assert_equal(sum(clumps(procinfo%cid)%ncells), procinfo%ncells, &
+    call shr_assert(sum(clumps(procinfo%cid)%ncells) == procinfo%ncells, &
                       msg='decompInit_lnd(): sum of clumps ncells does not match procinfo ncells')
 
     do lc = 1, clump_pproc
        cid = procinfo%cid(lc)
-       call assert_equal( (clumps(cid)%endg-clumps(cid)%begg+1), clumps(cid)%ncells, &
+       call shr_assert( (clumps(cid)%endg-clumps(cid)%begg+1) == clumps(cid)%ncells, &
                          msg='decompInit_lnd(): clumps(cid) endg-begg+1 does not match clumps ncells')
     end do
-    call assert_equal( (procinfo%endg-procinfo%begg+1), procinfo%ncells, &
+    call shr_assert( (procinfo%endg-procinfo%begg+1) == procinfo%ncells, &
                       msg='decompInit_lnd(): procinfo endg-begg+1 does not match procinfo ncells')
 
     call decompInit_lnd_clean()
@@ -320,14 +271,13 @@ contains
 
       !------------------------------------------------------------------------------
       subroutine decompInit_lnd_allocate( ier )
+         use decompMod, only : decompmod_allocate_clumps
          ! Allocate the temporary and long term variables set and used in decompInit_lnd
          integer, intent(out) :: ier ! error code
          !------------------------------------------------------------------------------
          !
          ! Long-term allocation:
          ! Arrays from decompMod are allocated here
-         ! TODO: This should move to a method in decompMod
-         ! as should the deallocates
          !
          ! Temporary allocation:
          ! Allocate some temporaries used only in decompInit_lnd
@@ -336,28 +286,12 @@ contains
          ! So decompInit_lnd_set_nclumps_numg_lns must be called first
          !------------------------------------------------------------------------------
 
-         !-------------------------------------------------------------
+         !------------------------------------------------------------------------------
          ! Allocate the longer term decompMod data
-         !-------------------------------------------------------------
+         !------------------------------------------------------------------------------
+         call procinfo%InitAllocate( clump_pproc )
 
-         ! allocate procinfo 
-         allocate(procinfo%cid(clump_pproc), stat=ier)
-         if (ier /= 0) then
-            call endrun(msg='allocation error for procinfo%cid', file=sourcefile, line=__LINE__)
-            return
-         endif
-
-         if ( nclumps < 1 )then
-            call endrun(msg="nclumps is NOT set before allocation", file=sourcefile, line=__LINE__)
-            return
-         end if
-        ! TODO: This will be moved to the other allocate and for a smaller size ----
-         allocate(clumps(nclumps), stat=ier)
-         if (ier /= 0) then
-            write(iulog,*) 'allocation error for clumps: nclumps, ier=', nclumps, ier
-            call endrun(msg='allocation error for clumps', file=sourcefile, line=__LINE__)
-            return
-         end if
+         call decompmod_allocate_clumps( )
 
          !-------------------------------------------------------------
          ! Temporary arrays that are just used in decompInit_lnd
@@ -381,48 +315,19 @@ contains
       !------------------------------------------------------------------------------
 
       subroutine decompInit_lnd_gindex_global_allocate( bounds, ier )
+         use decompMod, only : decompmod_allocate_gindex
          ! Allocate gindex_global which requires that bounds gridcell begg to endg be set first
          integer, intent(out) :: ier ! error code
          type(bounds_type), intent(in) :: bounds ! contains subgrid bounds data
 
          ier = 0
-         if ( bounds%endg < 1 )then
-            ier = 1
-            call endrun(msg="endg is NOT set before allocation", file=sourcefile, line=__LINE__)
-            return
-         end if
-         allocate(gindex_global(1:bounds%endg), stat=ier)
-         if (ier /= 0) then
-            call endrun(msg="allocation error for gindex_global", file=sourcefile, line=__LINE__)
-            return
-         end if
-         ! TODO: Remove the data, and only use the subroutine to calculate when needed
-         allocate(procinfo%ggidx(procinfo%begg:procinfo%endg), stat=ier)
-         if (ier /= 0) then
-            call endrun(msg='allocation error for procinfo%ggidx', file=sourcefile, line=__LINE__)
-            return
-         endif
-         procinfo%ggidx(:) = -1
-         allocate(procinfo%gi(procinfo%begg:procinfo%endg), stat=ier)
-         if (ier /= 0) then
-            call endrun(msg='allocation error for procinfo%gi', file=sourcefile, line=__LINE__)
-            return
-         endif
-         procinfo%gi(:) = -1
-         allocate(procinfo%gj(procinfo%begg:procinfo%endg), stat=ier)
-         if (ier /= 0) then
-            call endrun(msg='allocation error for procinfo%gj', file=sourcefile, line=__LINE__)
-            return
-         endif
-         procinfo%gj(:) = -1
+         call decompmod_allocate_gindex( bounds%endg )
       end subroutine decompInit_lnd_gindex_global_allocate
 
       !------------------------------------------------------------------------------
 
       subroutine decompInit_lnd_clean()
-         ! Deallocate the temporary variables used in decompInit_lnd
-         !deallocate(clumpcnt)
-         !deallocate(gdc2glo)
+         ! Currently there isn't any memory to clean up here
          !--- NOTE: Can only deallocate lcid after decompInit_clumps ----
          ! TODO: Move the deallocate for lcid to here, after decompInit_clumps only calculates the local taskj
       end subroutine decompInit_lnd_clean
@@ -543,9 +448,14 @@ contains
     !------------------------------------------------------------------------------
 
     call t_startf('decompInit_clumps')
-    call memcheck('decompInit_clumps: before alloc')
+!!$<<<<<<< HEAD
+!!$    call memcheck('decompInit_clumps: before alloc')
+!!$    !--- assign gridcells to clumps (and thus pes) ---
+!!$    call get_proc_bounds(bounds, allow_errors=.true.)
+!!$=======
     !--- assign gridcells to clumps (and thus pes) ---
-    call get_proc_bounds(bounds, allow_errors=.true.)
+    call get_proc_bounds(bounds, only_gridcell=.true.)
+!!$>>>>>>> ctsm5.4.057
     begg = bounds%begg; endg = bounds%endg
 
     allocate(allvecl(nclumps,5))   ! local  clumps [gcells,lunit,cols,patches,coh]
@@ -676,10 +586,8 @@ contains
     deallocate(allvecg,allvecl)
     deallocate(lcid)
 
-    call memcheck('decompInit_clumps: after deallocate')
-
-
     ! ------ Reset the clump type array for all non-local cid's to -1 to show it can be made smaller
+    ! TODO: Remove this when https://github.com/ESCOMP/CTSM/issues/3466 is done
     do cid = 1, nclumps
          if (clumps(cid)%owner /= iam) then
             clumps(cid)%owner     = -1
@@ -807,7 +715,7 @@ contains
     use clm_varctl             , only : use_fates
     use subgridMod             , only : subgrid_get_gcellinfo
     use decompMod              , only : bounds_type, get_proc_global, get_proc_bounds
-    use decompMod              , only : gindex_global
+    use decompMod              , only : gindex_global, nglob_x, nglob_y
     use decompMod              , only : gindex_grc, gindex_lun, gindex_col, gindex_patch, gindex_Cohort
     use decompMod              , only : procinfo, clump_type, clumps, get_proc_global
     use LandunitType           , only : lun
@@ -853,6 +761,8 @@ contains
     integer              :: gsize
     Character(len=32), parameter :: subname = 'decompInit_glcp'
     !------------------------------------------------------------------------------
+    call t_startf('decompInit_glcp')
+
     ! Get processor bounds
 
     call get_proc_bounds(bounds)
@@ -1078,7 +988,7 @@ contains
     deallocate(start_global)
     if (allocated(index_lndgridcells)) deallocate(index_lndgridcells)
 
-    !call t_stopf('decompInit_glcp')
+    call t_stopf('decompInit_glcp')
 
   end subroutine decompInit_glcp
 
